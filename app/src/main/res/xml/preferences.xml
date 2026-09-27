@@ -19,6 +19,12 @@
             android:defaultValue=""
             android:inputType="textPassword"
             android:singleLine="true" />
+        <EditTextPreference
+            android:key="trusted_ips"
+            android:title="Trusted IPs"
+            android:summary="Comma-separated LAN IPs (e.g. an NVR like Frigate) that skip the login prompt entirely. Leave blank to require auth from everyone."
+            android:defaultValue=""
+            android:singleLine="true" />
     </PreferenceCategory>
 
     <PreferenceCategory

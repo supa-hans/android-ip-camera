@@ -231,6 +231,40 @@
       font-weight: bold;
     }
 
+    .device-health {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      background: #1e1e1e;
+      border: 1px solid #333;
+      border-radius: 8px;
+      padding: 10px 12px;
+    }
+
+    .device-health-stat {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 13px;
+    }
+
+    .device-health-label {
+      color: #aaa;
+    }
+
+    .device-health-value {
+      color: #fff;
+      font-weight: 600;
+    }
+
+    .device-health-value.warn {
+      color: #ffb300;
+    }
+
+    .device-health-value.critical {
+      color: #ff5252;
+    }
+
     .notice {
       color: #555;
       font-size: 11px;
@@ -383,6 +417,22 @@
             <label style="margin:0; font-size:13px; color:#ccc; cursor:pointer;" title="Timer (seconds, 0 = instant)">⏱️</label>
             <input type="number" id="timerInput" min="0" max="300" step="1" value="0"
               style="width:50px; padding:4px 6px; font-size:13px; text-align:center; background:#333; color:#fff; border:1px solid #555; border-radius:4px; margin:0;">
+          </div>
+
+          <p class="group-title">Device Health</p>
+          <div class="device-health" id="deviceHealth">
+            <div class="device-health-stat">
+              <span class="device-health-label">Battery</span>
+              <span class="device-health-value" id="healthBattery">&mdash;</span>
+            </div>
+            <div class="device-health-stat">
+              <span class="device-health-label">Temperature</span>
+              <span class="device-health-value" id="healthTemp">&mdash;</span>
+            </div>
+            <div class="device-health-stat">
+              <span class="device-health-label">Thermal</span>
+              <span class="device-health-value" id="healthThermal">&mdash;</span>
+            </div>
           </div>
         </div>
 
@@ -1552,6 +1602,48 @@
         .catch(() => {});
     }
 
+    // Device Health panel — battery/temperature/thermal-throttling, polled independently of
+    // the stream itself so it keeps working even if the video feed stalls.
+    function updateDeviceHealth(data) {
+      const batteryEl = getElById('healthBattery');
+      const tempEl = getElById('healthTemp');
+      const thermalEl = getElById('healthThermal');
+
+      if (batteryEl) {
+        if (typeof data.battery_pct === 'number') {
+          const charging = data.charging ? ' ⚡' : '';
+          batteryEl.textContent = `${data.battery_pct}%${charging}`;
+        } else {
+          batteryEl.textContent = '—';
+        }
+      }
+
+      if (tempEl) {
+        if (typeof data.battery_temp_c === 'number') {
+          tempEl.textContent = `${data.battery_temp_c.toFixed(1)}°C`;
+          tempEl.classList.toggle('warn', data.battery_temp_c >= 40 && data.battery_temp_c < 45);
+          tempEl.classList.toggle('critical', data.battery_temp_c >= 45);
+        } else {
+          tempEl.textContent = '—';
+          tempEl.classList.remove('warn', 'critical');
+        }
+      }
+
+      if (thermalEl) {
+        const status = typeof data.thermal_status === 'string' ? data.thermal_status : 'unknown';
+        thermalEl.textContent = status.charAt(0).toUpperCase() + status.slice(1);
+        thermalEl.classList.toggle('warn', status === 'moderate' || status === 'light');
+        thermalEl.classList.toggle('critical', status === 'severe' || status === 'critical' || status === 'emergency' || status === 'shutdown');
+      }
+    }
+
+    function checkDeviceHealth() {
+      fetch('/status')
+        .then(r => r.json())
+        .then(data => updateDeviceHealth(data))
+        .catch(() => {});
+    }
+
     function toggleRecording() {
       const wasRecording = isRecording;
       const url = wasRecording ? '/record/stop' : '/record/start';
@@ -1636,6 +1728,11 @@
 
     setInterval(checkRecordingStatus, 3000);
     checkRecordingStatus();
+
+    // Battery/temp/thermal change slowly — 30s is plenty and keeps this from adding
+    // meaningful request traffic alongside the video stream itself.
+    setInterval(checkDeviceHealth, 30000);
+    checkDeviceHealth();
 
     // ---- Push-to-talk: stream the browser microphone to the phone's speaker ----
     let pttActive = false;

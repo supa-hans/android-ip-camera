@@ -1,6 +1,8 @@
 package com.github.digitallyrefined.androidipcamera.helpers
 
 import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
 import android.Manifest
 import android.content.pm.PackageManager
 import android.graphics.SurfaceTexture
@@ -11,9 +13,11 @@ import android.media.AudioFormat
 import android.media.AudioRecord
 import android.media.AudioTrack
 import android.media.MediaRecorder
+import android.os.BatteryManager
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
+import android.os.PowerManager
 import android.util.Base64
 import android.widget.Toast
 import androidx.core.content.ContextCompat
@@ -218,6 +222,88 @@ class StreamingServerHelper(
             serverSocket = null
         }
         closeClientConnection()
+    }
+
+    /**
+     * Checks whether [clientIp] is in the user-configured trusted-IP allowlist (SharedPreferences
+     * key "trusted_ips", a comma/whitespace-separated list of literal IPv4/IPv6 addresses — no
+     * CIDR support, kept deliberately simple since this is meant for a small number of known
+     * devices like an NVR, not general network ACLs). Matching is exact string comparison against
+     * the client's resolved address, so entries must be the device's real LAN IP.
+     */
+    private fun isTrustedIp(clientIp: String, prefs: android.content.SharedPreferences): Boolean {
+        val raw = prefs.getString("trusted_ips", "") ?: return false
+        if (raw.isBlank()) return false
+        return raw.split(",", " ", "\n")
+            .map { it.trim() }
+            .filter { it.isNotEmpty() }
+            .any { it == clientIp }
+    }
+
+    /**
+     * Battery/thermal health as JSON, for external polling (e.g. a Home Assistant REST sensor).
+     * Everything here comes from public, non-root Android APIs:
+     *  - battery percentage, charging state and battery temperature: the sticky
+     *    ACTION_BATTERY_CHANGED intent (BatteryManager), available since API 1.
+     *  - device-wide thermal throttling status: PowerManager.getCurrentThermalStatus(),
+     *    API 29+. This reports the OS's own judgement (NONE/LIGHT/MODERATE/SEVERE/CRITICAL/
+     *    EMERGENCY/SHUTDOWN) rather than a raw SoC temperature — reading the actual thermal
+     *    zone sensors under /sys/class/thermal requires root, which this app deliberately
+     *    doesn't use. Falls back to "unknown" below API 29 or if the OEM doesn't implement it.
+     */
+    private fun deviceStatusJson(): String {
+        val json = JSONObject()
+
+        // Reuse the same BATTERY_PROPERTY_CAPACITY path getBatteryPercent() already uses
+        // elsewhere in this file (for /info.json), so both endpoints agree.
+        val batteryPct = getBatteryPercent()
+        if (batteryPct >= 0) json.put("battery_pct", batteryPct)
+
+        try {
+            val bm = context.getSystemService(Context.BATTERY_SERVICE) as? BatteryManager
+            if (bm != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                json.put("charging", bm.isCharging)
+            }
+        } catch (e: Exception) {
+            onLog("deviceStatusJson: charging state read failed: ${e.message}")
+        }
+
+        // Temperature isn't exposed via BatteryManager.getIntProperty — only via the sticky
+        // ACTION_BATTERY_CHANGED intent, which registerReceiver(null, filter) reads without
+        // installing an actual receiver.
+        try {
+            val batteryIntent = context.registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
+            // EXTRA_TEMPERATURE is tenths of a degree Celsius (e.g. 312 == 31.2C)
+            val tempTenths = batteryIntent?.getIntExtra(BatteryManager.EXTRA_TEMPERATURE, Int.MIN_VALUE) ?: Int.MIN_VALUE
+            if (tempTenths != Int.MIN_VALUE) {
+                json.put("battery_temp_c", tempTenths / 10.0)
+            }
+        } catch (e: Exception) {
+            onLog("deviceStatusJson: battery temperature read failed: ${e.message}")
+        }
+
+        val thermalStatus = try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                val pm = context.getSystemService(Context.POWER_SERVICE) as? PowerManager
+                when (pm?.currentThermalStatus) {
+                    PowerManager.THERMAL_STATUS_NONE -> "none"
+                    PowerManager.THERMAL_STATUS_LIGHT -> "light"
+                    PowerManager.THERMAL_STATUS_MODERATE -> "moderate"
+                    PowerManager.THERMAL_STATUS_SEVERE -> "severe"
+                    PowerManager.THERMAL_STATUS_CRITICAL -> "critical"
+                    PowerManager.THERMAL_STATUS_EMERGENCY -> "emergency"
+                    PowerManager.THERMAL_STATUS_SHUTDOWN -> "shutdown"
+                    else -> "unknown"
+                }
+            } else {
+                "unknown"
+            }
+        } catch (e: Exception) {
+            "unknown"
+        }
+        json.put("thermal_status", thermalStatus)
+
+        return json.toString()
     }
 
     private fun isRateLimited(clientIp: String): Boolean {
@@ -634,19 +720,32 @@ class StreamingServerHelper(
             val prefs = PreferenceManager.getDefaultSharedPreferences(context)
             val enableAuth = prefs.getBoolean("enable_auth", true)
 
+            // TRUSTED IPS: known-good clients (e.g. an NVR like Frigate) that reconnect
+            // constantly and would otherwise be forced through the two-round-trip Basic Auth
+            // challenge on every single connection. Skipping auth for them entirely (rather
+            // than just exempting them from rate limiting) means they never send an
+            // unauthenticated probe in the first place. Anyone else still gets the full
+            // username/password prompt. Configured as a comma-separated list of IPs/CIDR-less
+            // addresses in "trusted_ips" (app settings).
+            val isTrusted = enableAuth && isTrustedIp(clientIp, prefs)
+            val effectiveEnableAuth = enableAuth && !isTrusted
+            if (isTrusted) {
+                onLog("Trusted IP $clientIp bypassing authentication")
+            }
+
             // Validate stored credentials if auth is enabled
-            val username = if (enableAuth) {
+            val username = if (effectiveEnableAuth) {
                 InputValidator.validateAndSanitizeUsername(rawUsername)
             } else {
                 null
             }
-            val password = if (enableAuth) {
+            val password = if (effectiveEnableAuth) {
                 InputValidator.validateAndSanitizePassword(rawPassword)
             } else {
                 null
             }
 
-            if (enableAuth) {
+            if (effectiveEnableAuth) {
                 if (username == null || password == null || username.isEmpty() || password.isEmpty()) {
                     // CRITICAL: No valid credentials configured - reject all connections
                     recordFailedAttempt(clientIp)
@@ -682,7 +781,7 @@ class StreamingServerHelper(
                 name.equals("Authorization", ignoreCase = true) && value.startsWith("Basic ", ignoreCase = true)
             }
 
-            if (enableAuth) {
+            if (effectiveEnableAuth) {
                 if (authHeaderPair == null) {
                     // Rate limiting ONLY applies to unauthenticated requests
                     if (isRateLimited(clientIp)) {
@@ -695,7 +794,16 @@ class StreamingServerHelper(
                         Thread.sleep(100)
                         return
                     }
-                    recordFailedAttempt(clientIp)
+                    // NOTE: deliberately NOT calling recordFailedAttempt() here. A request with
+                    // no Authorization header is the normal first half of the standard HTTP
+                    // Basic Auth handshake (RFC 7617) — every plain HTTP client (ffmpeg's http
+                    // protocol included) sends one request without credentials, receives this
+                    // 401 + WWW-Authenticate challenge, then retries with credentials. Counting
+                    // that as a "failed attempt" meant a single reconnecting client (e.g. an NVR
+                    // like Frigate/go2rtc) could exhaust MAX_FAILED_ATTEMPTS purely from normal
+                    // protocol negotiation and get itself rate-limited for BLOCK_DURATION_MS,
+                    // with no actual wrong password ever involved. Only genuinely bad credentials
+                    // (malformed base64, or a decoded value that doesn't match) count below.
                     writer.print("HTTP/1.1 401 Unauthorized\r\n")
                     writer.print("WWW-Authenticate: Basic realm=\"Android IP Camera\"\r\n")
                     writer.print("Connection: close\r\n\r\n")
@@ -868,6 +976,21 @@ class StreamingServerHelper(
 
             if (path == "/record/status") {
                 val json = onRecordStatus()
+                writer.print("HTTP/1.1 200 OK\r\n")
+                writer.print("Content-Type: application/json\r\n")
+                writer.print("Connection: close\r\n\r\n")
+                writer.print(json)
+                writer.flush()
+                try { socket.close() } catch (_: Exception) {}
+                return
+            }
+
+            // Device health: battery %, charging state, battery temperature and thermal
+            // throttling status. All available without root via public Android APIs, so this
+            // works on every device this app already supports. Intended for polling from an
+            // external tool (e.g. a Home Assistant REST sensor) rather than the phone's own UI.
+            if (path == "/status") {
+                val json = deviceStatusJson()
                 writer.print("HTTP/1.1 200 OK\r\n")
                 writer.print("Content-Type: application/json\r\n")
                 writer.print("Connection: close\r\n\r\n")
