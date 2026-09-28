@@ -67,6 +67,15 @@
             android:defaultValue="4444"
             android:inputType="number"
             android:singleLine="true" />
+        <!-- Entries/entryValues are populated at runtime from this device's actual network
+             interfaces (see SettingsFragment.refreshIpEntries) - they vary per device and per
+             moment (e.g. whether Tailscale is currently connected), so a static array here
+             wouldn't mean anything. -->
+        <ListPreference
+            android:key="display_ip"
+            android:title="Server IP Address"
+            android:summary="Which of this device's IP addresses to show/copy above - pin it to your Tailscale IP so it doesn't change when Wi-Fi does, e.g. when wiring this into Frigate"
+            android:defaultValue="auto" />
     </PreferenceCategory>
 
     <!-- Same "resolution"/"fps" remote-control keys the web UI's own controls write - stream_res

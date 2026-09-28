@@ -28,6 +28,7 @@ import androidx.preference.PreferenceManager
 import com.github.digitallyrefined.androidipcamera.R
 import com.github.digitallyrefined.androidipcamera.StreamingService
 import com.github.digitallyrefined.androidipcamera.helpers.InputValidator
+import com.github.digitallyrefined.androidipcamera.helpers.IpAddressHelper
 import com.github.digitallyrefined.androidipcamera.helpers.RecordingsHelper
 import com.github.digitallyrefined.androidipcamera.helpers.SecureStorage
 import com.google.android.material.button.MaterialButton
@@ -46,11 +47,11 @@ class SettingsActivity : AppCompatActivity() {
     private var hasRequestedPermissions = false
     private var dotPulseAnimator: ObjectAnimator? = null
 
-    // The displayed URL (protocol/port) depends on tls_version and server_port, which are
-    // edited in the settings list below the hero - without this, the text only picked up a
-    // change the next time the activity was recreated (e.g. an app restart).
+    // The displayed URL (protocol/port/IP) depends on tls_version, server_port and display_ip,
+    // which are edited in the settings list below the hero - without this, the text only picked
+    // up a change the next time the activity was recreated (e.g. an app restart).
     private val urlPrefsListener = android.content.SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
-        if (key == "tls_version" || key == "server_port") refreshHeroState()
+        if (key == "tls_version" || key == "server_port" || key == "display_ip") refreshHeroState()
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -82,18 +83,7 @@ class SettingsActivity : AppCompatActivity() {
         ipAddressText.setOnClickListener { copyIpAddressToClipboard() }
     }
 
-    private fun getLocalIpAddress(): String {
-        try {
-            java.net.NetworkInterface.getNetworkInterfaces().toList().forEach { networkInterface ->
-                networkInterface.inetAddresses.toList().forEach { address ->
-                    if (!address.isLoopbackAddress && address is java.net.Inet4Address) {
-                        return address.hostAddress ?: "unknown"
-                    }
-                }
-            }
-        } catch (_: Exception) {}
-        return "unknown"
-    }
+    private fun getLocalIpAddress(): String = IpAddressHelper.resolve(this)
 
     private fun copyIpAddressToClipboard() {
         val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
@@ -268,6 +258,9 @@ class SettingsActivity : AppCompatActivity() {
             super.onResume()
             PreferenceManager.getDefaultSharedPreferences(requireContext())
                 .registerOnSharedPreferenceChangeListener(streamPrefsListener)
+            // Interfaces can come and go while this screen isn't open (e.g. Tailscale
+            // connecting/disconnecting) - refresh the list every time it's shown again.
+            findPreference<ListPreference>("display_ip")?.let { refreshIpEntries(it) }
         }
 
         override fun onPause() {
@@ -279,6 +272,33 @@ class SettingsActivity : AppCompatActivity() {
         /** "auto" reads oddly on its own - pairs it with the quality preset it falls back to. */
         private fun streamResSummary(value: String): String =
             if (value == "auto") "Auto (matches the app's default quality)" else value
+
+        /** Rebuilds the dropdown's options from whatever interfaces are actually up right now. */
+        private fun refreshIpEntries(pref: ListPreference) {
+            val addresses = IpAddressHelper.listAddresses()
+            val entries = mutableListOf("Auto (first available)")
+            val values = mutableListOf("auto")
+            addresses.forEach { (name, ip) ->
+                entries.add("$name  ·  $ip")
+                values.add(name)
+            }
+            pref.entries = entries.toTypedArray()
+            pref.entryValues = values.toTypedArray()
+            pref.summary = ipSummaryFor(pref.value ?: "auto")
+        }
+
+        private fun ipSummaryFor(value: String): String {
+            if (value == "auto") return "Auto (first available)"
+            val match = IpAddressHelper.listAddresses().firstOrNull { it.first == value }
+            return if (match != null) {
+                "${match.first}  ·  ${match.second}"
+            } else {
+                // Picked interface isn't up right now (e.g. Tailscale disconnected) - still shown
+                // as selected since it'll resolve again once it reconnects; the hero falls back
+                // to Auto in the meantime (see IpAddressHelper.resolve).
+                "$value (not connected right now - showing Auto until it reconnects)"
+            }
+        }
 
         /** Applies a resolution/fps change live, the same way the web UI's own controls do - see
          *  ACTION_RESTART_CAMERA. Only when the server's already running: startService() would
@@ -434,6 +454,18 @@ class SettingsActivity : AppCompatActivity() {
                         return@setOnPreferenceChangeListener false
                     }
                     summary = "Port $port"
+                    true
+                }
+            }
+
+            // Which of this device's IP addresses to show/copy in the hero. Populated from
+            // whatever interfaces are actually up right now (Wi-Fi LAN, tailscale0, ...) since
+            // that list varies per device and per moment - "auto" keeps picking the first one
+            // found, same as before this preference existed.
+            findPreference<ListPreference>("display_ip")?.apply {
+                refreshIpEntries(this)
+                setOnPreferenceChangeListener { _, newValue ->
+                    summary = ipSummaryFor(newValue.toString())
                     true
                 }
             }

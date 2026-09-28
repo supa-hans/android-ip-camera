@@ -28,9 +28,8 @@ import androidx.preference.PreferenceManager
 import com.github.digitallyrefined.androidipcamera.R
 import com.github.digitallyrefined.androidipcamera.StreamingService
 import com.github.digitallyrefined.androidipcamera.databinding.ActivityMainBinding
+import com.github.digitallyrefined.androidipcamera.helpers.IpAddressHelper
 import com.google.android.material.color.DynamicColors
-import java.net.Inet4Address
-import java.net.NetworkInterface
 
 class MainActivity : AppCompatActivity() {
     private lateinit var viewBinding: ActivityMainBinding
@@ -314,20 +313,7 @@ class MainActivity : AppCompatActivity() {
         checkNotificationChannelEnabled()
     }
 
-    private fun getLocalIpAddress(): String {
-        try {
-            NetworkInterface.getNetworkInterfaces().toList().forEach { networkInterface ->
-                networkInterface.inetAddresses.toList().forEach { address ->
-                    if (!address.isLoopbackAddress && address is Inet4Address) {
-                        return address.hostAddress ?: "unknown"
-                    }
-                }
-            }
-        } catch (e: Exception) {
-            e.printStackTrace()
-        }
-        return "unknown"
-    }
+    private fun getLocalIpAddress(): String = IpAddressHelper.resolve(this)
 
     private fun hideShowPreview() {
         val viewFinder = viewBinding.viewFinder
