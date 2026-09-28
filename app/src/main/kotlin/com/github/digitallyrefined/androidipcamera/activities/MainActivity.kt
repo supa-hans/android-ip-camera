@@ -432,7 +432,10 @@ class MainActivity : AppCompatActivity() {
                 Manifest.permission.WRITE_EXTERNAL_STORAGE
             )
         }
-        private val OPTIONAL_PERMISSIONS = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+        // Also shared with SettingsActivity's hero button - RECORD_AUDIO in particular needs to
+        // be requested up front, since StreamingService only declares the microphone foreground-
+        // service type (and therefore only attempts to use the mic at all) when this is granted.
+        val OPTIONAL_PERMISSIONS = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             arrayOf(
                 Manifest.permission.RECORD_AUDIO,
                 Manifest.permission.NEARBY_WIFI_DEVICES

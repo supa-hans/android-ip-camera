@@ -251,9 +251,25 @@ class StreamingService : LifecycleService() {
             .setDeleteIntent(restartPI)
             .setOngoing(true)
             .build()
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q)
-            startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_CAMERA or ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE)
-        else startForeground(NOTIFICATION_ID, notification)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            // Android requires that a declared foreground-service type's matching runtime
+            // permission actually be held at the moment startForeground() is called, or the
+            // call throws a SecurityException and takes the whole service down with it - crashing
+            // the app. RECORD_AUDIO is optional in this app (audio is a nice-to-have, not
+            // required for the camera to work), so the microphone type is only declared when
+            // that permission is actually granted; otherwise the service still starts, just
+            // without audio, instead of crashing outright.
+            val hasMicPermission = ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) ==
+                PackageManager.PERMISSION_GRANTED
+            val serviceType = if (hasMicPermission) {
+                ServiceInfo.FOREGROUND_SERVICE_TYPE_CAMERA or ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE
+            } else {
+                ServiceInfo.FOREGROUND_SERVICE_TYPE_CAMERA
+            }
+            startForeground(NOTIFICATION_ID, notification, serviceType)
+        } else {
+            startForeground(NOTIFICATION_ID, notification)
+        }
     }
 
     // MainActivity attaches PreviewView here; camera restarts when a surface is set while streaming.

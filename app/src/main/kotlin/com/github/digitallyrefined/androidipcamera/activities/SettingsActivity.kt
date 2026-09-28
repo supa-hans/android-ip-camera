@@ -140,7 +140,13 @@ class SettingsActivity : AppCompatActivity() {
         if (!allPermissionsGranted()) {
             if (!hasRequestedPermissions) {
                 hasRequestedPermissions = true
-                ActivityCompat.requestPermissions(this, MainActivity.REQUIRED_PERMISSIONS, REQUEST_CODE_PERMISSIONS)
+                // Request the optional permissions (RECORD_AUDIO in particular) alongside the
+                // required ones, same as MainActivity used to on its old launch-time prompt - the
+                // service can still start without them, but asking up front means the user gets
+                // a real choice about audio instead of it silently never working.
+                val toRequest = (MainActivity.REQUIRED_PERMISSIONS + MainActivity.OPTIONAL_PERMISSIONS)
+                    .distinct().toTypedArray()
+                ActivityCompat.requestPermissions(this, toRequest, REQUEST_CODE_PERMISSIONS)
             } else {
                 Toast.makeText(this, "Camera permission is required. Enable it in App Settings.", Toast.LENGTH_LONG).show()
             }
@@ -217,12 +223,6 @@ class SettingsActivity : AppCompatActivity() {
                     )
                     true
                 }
-
-                setOnPreferenceChangeListener { _, _ ->
-                    // Restart server when certificate path changes
-                    restartStreamingServer()
-                    true
-                }
             }
 
             val secureStorage = SecureStorage(requireContext())
@@ -239,8 +239,8 @@ class SettingsActivity : AppCompatActivity() {
                     // Show/hide username and password preferences
                     findPreference<EditTextPreference>("username")?.isVisible = enabled
                     findPreference<EditTextPreference>("password")?.isVisible = enabled
-                    // Restart server when authentication setting changes
-                    restartStreamingServer()
+                    // Takes effect next time the server is started from the hero button - nothing
+                    // here touches the running server.
                     true
                 }
             }
@@ -259,8 +259,6 @@ class SettingsActivity : AppCompatActivity() {
                     findPreference<Preference>("certificate_path")?.isVisible = tlsEnabled
                     findPreference<EditTextPreference>("certificate_password")?.isVisible = tlsEnabled
                     findPreference<Preference>("test_certificate")?.isVisible = tlsEnabled
-                    // Restart server when TLS version changes
-                    restartStreamingServer()
                     true
                 }
             }
@@ -280,8 +278,6 @@ class SettingsActivity : AppCompatActivity() {
                     }
                     // Store securely (empty string means use default)
                     secureStorage.putSecureString(SecureStorage.KEY_USERNAME, username)
-                    // Restart server when username changes
-                    restartStreamingServer()
                     true
                 }
             }
@@ -313,8 +309,6 @@ class SettingsActivity : AppCompatActivity() {
 
                     // Store securely only; do not persist plaintext in SharedPreferences
                     secureStorage.putSecureString(SecureStorage.KEY_PASSWORD, password)
-                    // Restart server when password changes
-                    restartStreamingServer()
                     // Returning false prevents EditTextPreference from saving the plaintext
                     false
                 }
@@ -338,7 +332,6 @@ class SettingsActivity : AppCompatActivity() {
                         return@setOnPreferenceChangeListener false
                     }
                     summary = "Port $port"
-                    restartStreamingServer()
                     true
                 }
             }
@@ -379,8 +372,6 @@ class SettingsActivity : AppCompatActivity() {
                         "Certificate password saved, use 'Test Certificate Setup' to validate",
                         Toast.LENGTH_SHORT
                     ).show()
-                    // Restart server when certificate password changes
-                    restartStreamingServer()
                     // Returning false prevents EditTextPreference from saving the plaintext
                     false
                 }
@@ -468,18 +459,22 @@ class SettingsActivity : AppCompatActivity() {
 
         }
 
-        /** Called on creation and whenever the hero's running state changes. Locks username/
-         *  password while the server is running instead of letting each edit trigger its own
-         *  restart - stop the server, make the change, start it again. */
+        /** Called on creation and whenever the hero's running state changes. Locks the auth
+         *  options while the server is running: only the hero button starts/stops the server, so
+         *  these can't take effect until then anyway - locking them avoids the false impression
+         *  that a change here has any live effect on the running server. */
         fun refreshAuthFieldLockState(serverRunning: Boolean) {
+            val lockedSummary = if (serverRunning) "Stop the server to change this" else null
+            findPreference<androidx.preference.CheckBoxPreference>("enable_auth")?.isEnabled = !serverRunning
             findPreference<EditTextPreference>("username")?.apply {
                 isEnabled = !serverRunning
-                summary = if (serverRunning) "Stop the server to change this" else null
+                summary = lockedSummary
             }
             findPreference<EditTextPreference>("password")?.apply {
                 isEnabled = !serverRunning
-                summary = if (serverRunning) "Stop the server to change this" else null
+                summary = lockedSummary
             }
+            findPreference<EditTextPreference>("trusted_ips")?.isEnabled = !serverRunning
         }
 
         override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
@@ -516,7 +511,7 @@ class SettingsActivity : AppCompatActivity() {
                     findPreference<Preference>("certificate_path")?.summary = certificatePath
 
                     Toast.makeText(requireContext(),
-                        "Certificate configured, restart the app for changes to take effect",
+                        "Certificate configured - stop and start the camera server for this to take effect",
                         Toast.LENGTH_SHORT).show()
                 }
             }
@@ -552,12 +547,5 @@ class SettingsActivity : AppCompatActivity() {
             return "Custom folder: ${name ?: uri}"
         }
 
-        private fun restartStreamingServer() {
-            val intent = Intent(requireContext(), StreamingService::class.java).apply {
-                action = StreamingService.ACTION_RESTART_SERVER
-            }
-            requireContext().startService(intent)
-            Toast.makeText(requireContext(), "Server restarting...", Toast.LENGTH_SHORT).show()
-        }
     }
 }
