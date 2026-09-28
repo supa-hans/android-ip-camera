@@ -26,15 +26,29 @@
             android:textStyle="bold"
             android:textColor="?attr/colorOnPrimaryContainer" />
 
-        <TextView
-            android:id="@+id/heroStatusText"
+        <LinearLayout
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginTop="4dp"
-            android:textSize="15sp"
-            android:textColor="?attr/colorOnPrimaryContainer"
-            android:alpha="0.85"
-            android:text="Checking status..." />
+            android:layout_marginTop="6dp"
+            android:orientation="horizontal"
+            android:gravity="center_vertical">
+
+            <View
+                android:id="@+id/heroStatusDot"
+                android:layout_width="10dp"
+                android:layout_height="10dp"
+                android:layout_marginEnd="8dp"
+                android:background="@drawable/status_dot" />
+
+            <TextView
+                android:id="@+id/heroStatusText"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textSize="15sp"
+                android:textColor="?attr/colorOnPrimaryContainer"
+                android:alpha="0.85"
+                android:text="Checking status..." />
+        </LinearLayout>
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/heroStartStopButton"

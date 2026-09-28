@@ -88,4 +88,11 @@
             android:persistent="false"
             android:dependency="recording_enabled" />
     </PreferenceCategory>
+
+    <PreferenceCategory android:title="App">
+        <Preference
+            android:key="exit_app"
+            android:title="Exit App"
+            android:summary="Stop the camera server and close the app" />
+    </PreferenceCategory>
 </PreferenceScreen>

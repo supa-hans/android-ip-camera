@@ -1,18 +1,24 @@
 package com.github.digitallyrefined.androidipcamera.activities
 
+import android.animation.ObjectAnimator
 import android.app.Activity
 import android.app.ActivityManager
 import android.content.Context
 import android.content.Intent
+import android.content.res.ColorStateList
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.view.View
+import android.view.animation.LinearInterpolator
 import android.widget.Toast
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
+import androidx.core.view.ViewCompat
 import androidx.documentfile.provider.DocumentFile
 import androidx.preference.EditTextPreference
 import androidx.preference.Preference
@@ -33,8 +39,10 @@ import com.google.android.material.color.DynamicColors
  */
 class SettingsActivity : AppCompatActivity() {
     private lateinit var statusText: android.widget.TextView
+    private lateinit var statusDot: View
     private lateinit var startStopButton: MaterialButton
     private var hasRequestedPermissions = false
+    private var dotPulseAnimator: ObjectAnimator? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -45,6 +53,7 @@ class SettingsActivity : AppCompatActivity() {
         setContentView(R.layout.activity_settings)
 
         statusText = findViewById(R.id.heroStatusText)
+        statusDot = findViewById(R.id.heroStatusDot)
         startStopButton = findViewById(R.id.heroStartStopButton)
         val viewCameraButton = findViewById<MaterialButton>(R.id.heroViewCameraButton)
 
@@ -66,18 +75,61 @@ class SettingsActivity : AppCompatActivity() {
         refreshHeroState()
     }
 
-    private fun refreshHeroState() {
+    override fun onDestroy() {
+        super.onDestroy()
+        dotPulseAnimator?.cancel()
+    }
+
+    /** Also called (with a short delay) after the start/stop button is tapped, and by the
+     *  settings fragment's exit action - anything that can change whether the server is running
+     *  routes back through here so the hero and the locked auth fields never go stale. */
+    fun refreshHeroState() {
         val running = isServiceRunning()
         startStopButton.text = if (running) "Stop Camera Server" else "Start Camera Server"
         statusText.text = if (running) "Camera server is running" else "Camera server is stopped"
+
+        val dotColor = if (running) 0xFF4CAF50.toInt() else 0xFF9E9E9E.toInt()
+        ViewCompat.setBackgroundTintList(statusDot, ColorStateList.valueOf(dotColor))
+        if (running) {
+            if (dotPulseAnimator == null) {
+                dotPulseAnimator = ObjectAnimator.ofFloat(statusDot, View.ALPHA, 1f, 0.25f, 1f).apply {
+                    duration = 1400
+                    repeatCount = ObjectAnimator.INFINITE
+                    interpolator = LinearInterpolator()
+                    start()
+                }
+            }
+        } else {
+            dotPulseAnimator?.cancel()
+            dotPulseAnimator = null
+            statusDot.alpha = 1f
+        }
+
+        (supportFragmentManager.findFragmentById(R.id.settingsFragmentContainer) as? SettingsFragment)
+            ?.refreshAuthFieldLockState(running)
     }
 
-    private fun isServiceRunning(): Boolean {
+    fun isServiceRunning(): Boolean {
         val manager = getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
         @Suppress("DEPRECATION")
         return manager.getRunningServices(Int.MAX_VALUE).any {
             it.service.className == StreamingService::class.java.name
         }
+    }
+
+    /** Shared by the settings menu's "Exit App" entry and MainActivity's X button. */
+    fun confirmExitApp() {
+        AlertDialog.Builder(this)
+            .setTitle("Exit app?")
+            .setMessage("This stops the camera server and closes the app.")
+            .setPositiveButton("Exit") { _, _ ->
+                startService(Intent(this, StreamingService::class.java).apply {
+                    action = StreamingService.ACTION_STOP_SERVICE
+                })
+                finishAndRemoveTask()
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
     }
 
     private fun allPermissionsGranted() = MainActivity.REQUIRED_PERMISSIONS.all {
@@ -140,6 +192,17 @@ class SettingsActivity : AppCompatActivity() {
 
         override fun onCreatePreferences(savedInstanceState: Bundle?, rootKey: String?) {
             setPreferencesFromResource(R.xml.preferences, rootKey)
+
+            // Username/password get locked while the server is running (see
+            // refreshAuthFieldLockState below) - editing either one restarts the server anyway,
+            // so this avoids someone bouncing the stream a couple of times while typing a new
+            // credential pair instead of just stopping the server first.
+            refreshAuthFieldLockState((activity as? SettingsActivity)?.isServiceRunning() == true)
+
+            findPreference<Preference>("exit_app")?.setOnPreferenceClickListener {
+                (activity as? SettingsActivity)?.confirmExitApp()
+                true
+            }
 
             // Set up certificate selection preference
             findPreference<Preference>("certificate_path")?.apply {
@@ -403,6 +466,20 @@ class SettingsActivity : AppCompatActivity() {
                 }
             }
 
+        }
+
+        /** Called on creation and whenever the hero's running state changes. Locks username/
+         *  password while the server is running instead of letting each edit trigger its own
+         *  restart - stop the server, make the change, start it again. */
+        fun refreshAuthFieldLockState(serverRunning: Boolean) {
+            findPreference<EditTextPreference>("username")?.apply {
+                isEnabled = !serverRunning
+                summary = if (serverRunning) "Stop the server to change this" else null
+            }
+            findPreference<EditTextPreference>("password")?.apply {
+                isEnabled = !serverRunning
+                summary = if (serverRunning) "Stop the server to change this" else null
+            }
         }
 
         override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {

@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Plain circle; tinted at runtime (green while running, gray while stopped) and pulsed with a
+     simple alpha animation instead of pulling in a Lottie/animation library for one dot. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="oval">
+    <solid android:color="#FFFFFF" />
+</shape>

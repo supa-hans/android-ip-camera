@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The webcam glyph from the supplied icon artwork, flattened from gradients to flat fills
+     (negligible difference at launcher-icon sizes) and scaled down ~79% around its own center
+     so it sits inside the adaptive-icon safe zone instead of touching the edge of the 108dp
+     canvas - the original art fills its frame edge-to-edge, which is fine for a pre-rounded
+     single image but gets clipped if placed at full size behind a circular/squircle mask. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="708"
+    android:viewportHeight="708">
+    <group
+        android:pivotX="354"
+        android:pivotY="354"
+        android:scaleX="0.79"
+        android:scaleY="0.79">
+        <!-- Body / stand -->
+        <path
+            android:fillColor="#FFFFFF"
+            android:pathData="M225.08,425.95c-37.6,13.15,-63.12,51.3,-63.12,94.72,0,65.77,53.72,102.61,124.89,102.61h134.3c71.18,0,124.89,-36.83,124.89,-102.61,0,-43.41,-25.52,-81.56,-63.12,-94.72,-41.63,-14.47,-216.22,-14.47,-257.85,0h0Z" />
+        <!-- Lens housing (head) -->
+        <path
+            android:fillColor="#FFFFFF"
+            android:pathData="M172.08,266.65 A181.92,181.92 0 1,0 535.92,266.65 A181.92,181.92 0 1,0 172.08,266.65 Z" />
+        <!-- Lens rings, outer to inner -->
+        <path
+            android:fillColor="#232C46"
+            android:pathData="M208.18,257.01 A135.24,132.32 0 1,0 478.66,257.01 A135.24,132.32 0 1,0 208.18,257.01 Z" />
+        <path
+            android:fillColor="#273554"
+            android:pathData="M272.18,257.01 A71.24,69.71 0 1,0 414.66,257.01 A71.24,69.71 0 1,0 272.18,257.01 Z" />
+        <path
+            android:fillColor="#182238"
+            android:pathData="M291.50,257.01 A51.92,50.8 0 1,0 395.34,257.01 A51.92,50.8 0 1,0 291.50,257.01 Z" />
+        <path
+            android:fillColor="#0F172A"
+            android:pathData="M321.69,257.01 A21.73,21.27 0 1,0 365.15,257.01 A21.73,21.27 0 1,0 321.69,257.01 Z" />
+        <!-- Lens highlight -->
+        <path
+            android:fillColor="#5B8FF7"
+            android:pathData="M293.91,228.66 A20.53,20.08 0 1,0 334.97,228.66 A20.53,20.08 0 1,0 293.91,228.66 Z" />
+    </group>
+</vector>

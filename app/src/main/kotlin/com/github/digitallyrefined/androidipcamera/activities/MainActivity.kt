@@ -174,8 +174,32 @@ class MainActivity : AppCompatActivity() {
         }
 
         findViewById<ImageButton>(R.id.exitButton).setOnClickListener {
-            exitApp()
+            confirmExit()
         }
+
+        findViewById<TextView>(R.id.ipAddressText).setOnClickListener {
+            copyIpAddressToClipboard()
+        }
+    }
+
+    private fun copyIpAddressToClipboard() {
+        val ipAddressText = findViewById<TextView>(R.id.ipAddressText)
+        val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+        clipboard.setPrimaryClip(android.content.ClipData.newPlainText("Camera URL", ipAddressText.text))
+        // Android 13+ already shows its own "Copied" system toast for clipboard changes, so
+        // showing our own here would just double up.
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
+            Toast.makeText(this, "Copied to clipboard", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private fun confirmExit() {
+        androidx.appcompat.app.AlertDialog.Builder(this)
+            .setTitle("Exit app?")
+            .setMessage("This stops the camera server and closes the app.")
+            .setPositiveButton("Exit") { _, _ -> exitApp() }
+            .setNegativeButton("Cancel", null)
+            .show()
     }
 
     private fun startService() {
