@@ -226,6 +226,21 @@ class StreamingServerHelper(
     }
 
     /**
+     * Full remote reset, for the "Restart server" control in the web UI (there's no other way to
+     * recover a stuck server when you're not physically at the phone). Goes further than a plain
+     * stop/start: also wipes per-IP failed-auth counters and blocks (see isRateLimited/
+     * recordFailedAttempt above), which a plain socket restart wouldn't touch since that state
+     * lives in this same helper instance, not in the listening socket. This is deliberately the
+     * one button that resets everything at once, rather than separate "restart socket" /
+     * "clear IP blocks" controls - simpler to reason about from the UI, and there's no real
+     * downside to always clearing both together.
+     */
+    fun restartServerFull() {
+        failedAttempts.clear()
+        startStreamingServer()
+    }
+
+    /**
      * Checks whether [clientIp] is in the user-configured trusted-IP allowlist (SharedPreferences
      * key "trusted_ips", a comma/whitespace-separated list of literal IPv4/IPv6 addresses — no
      * CIDR support, kept deliberately simple since this is meant for a small number of known
@@ -907,6 +922,20 @@ class StreamingServerHelper(
                 writer.print(htmlResponse)
                 writer.flush()
                 socket.close()
+                return
+            }
+
+            // Remote "Restart server" - the only recovery option when you're not physically at the
+            // phone. Respond and close this connection first, then tear down and recreate the
+            // listening socket: that only affects the *listening* socket, not this already-accepted
+            // client connection, so the response reaches the caller before the restart happens.
+            if (path == "/control/restart-server") {
+                writer.print("HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nConnection: close\r\n\r\n")
+                writer.print("{\"restarting\":true}")
+                writer.flush()
+                try { socket.close() } catch (_: Exception) {}
+                onLog("Remote restart requested from $clientIp")
+                restartServerFull()
                 return
             }
 

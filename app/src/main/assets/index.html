@@ -438,6 +438,12 @@
               <span class="device-health-value" id="healthThermal">&mdash;</span>
             </div>
           </div>
+
+          <p class="group-title">Server</p>
+          <!-- Reachable from anywhere over Tailscale, unlike the app's own Settings screen -
+               the only way to recover a stuck server (e.g. a stuck IP block) without being
+               physically at the phone. -->
+          <button id="restartServerBtn" class="btn" style="width:100%;">🔄 Restart Server</button>
         </div>
 
         <p class="notice">Some changes will momentarily restart the camera.</p>
@@ -755,6 +761,21 @@
         return (isFinite(n) && n > 0) ? n : 1;
       } catch (_) { return 1; }
     }
+
+    getElById('restartServerBtn')?.addEventListener('click', () => {
+      if (!confirm('Restart the camera server? The stream will briefly drop for anyone watching (including Frigate/NVR).')) {
+        return;
+      }
+      const btn = getElById('restartServerBtn');
+      if (btn) { btn.disabled = true; btn.innerText = 'Restarting…'; }
+      fetch('/control/restart-server', { method: 'GET', credentials: 'include' })
+        .catch(() => { /* the connection itself may drop mid-restart - that's expected */ })
+        .finally(() => {
+          // Give the server a moment to actually come back up before reloading the page -
+          // reloading immediately would just hit the old, now-closing socket.
+          setTimeout(() => { window.location.reload(); }, 3000);
+        });
+    });
 
     getElById('resetDefaultsBtn')?.addEventListener('click', () => {
       try {

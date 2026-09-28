@@ -45,6 +45,13 @@ class SettingsActivity : AppCompatActivity() {
     private var hasRequestedPermissions = false
     private var dotPulseAnimator: ObjectAnimator? = null
 
+    // The displayed URL (protocol/port) depends on tls_version and server_port, which are
+    // edited in the settings list below the hero - without this, the text only picked up a
+    // change the next time the activity was recreated (e.g. an app restart).
+    private val urlPrefsListener = android.content.SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
+        if (key == "tls_version" || key == "server_port") refreshHeroState()
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         // Lightweight Material You: this is the one line that pulls in wallpaper-derived colors
@@ -99,7 +106,15 @@ class SettingsActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
+        PreferenceManager.getDefaultSharedPreferences(this)
+            .registerOnSharedPreferenceChangeListener(urlPrefsListener)
         refreshHeroState()
+    }
+
+    override fun onPause() {
+        super.onPause()
+        PreferenceManager.getDefaultSharedPreferences(this)
+            .unregisterOnSharedPreferenceChangeListener(urlPrefsListener)
     }
 
     override fun onDestroy() {
