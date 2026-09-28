@@ -21,6 +21,7 @@ import androidx.core.content.ContextCompat
 import androidx.core.view.ViewCompat
 import androidx.documentfile.provider.DocumentFile
 import androidx.preference.EditTextPreference
+import androidx.preference.ListPreference
 import androidx.preference.Preference
 import androidx.preference.PreferenceFragmentCompat
 import androidx.preference.PreferenceManager
@@ -244,6 +245,54 @@ class SettingsActivity : AppCompatActivity() {
             private const val PICK_RECORDING_FOLDER = 2
         }
 
+        // stream_res/stream_fps are also written from outside this screen entirely - the web
+        // control UI writes them directly via its own HTTP control endpoint, in a different
+        // process context (the service), not through these Preference widgets. Without this,
+        // a change made there would only show up here the next time the screen is recreated.
+        private val streamPrefsListener = android.content.SharedPreferences.OnSharedPreferenceChangeListener { prefs, key ->
+            when (key) {
+                "stream_res" -> findPreference<ListPreference>("stream_res")?.apply {
+                    val current = prefs.getString("stream_res", "auto") ?: "auto"
+                    if (value != current) value = current
+                    summary = streamResSummary(current)
+                }
+                "stream_fps" -> findPreference<EditTextPreference>("stream_fps")?.apply {
+                    val current = prefs.getString("stream_fps", "30") ?: "30"
+                    if (text != current) text = current
+                    summary = "$current fps"
+                }
+            }
+        }
+
+        override fun onResume() {
+            super.onResume()
+            PreferenceManager.getDefaultSharedPreferences(requireContext())
+                .registerOnSharedPreferenceChangeListener(streamPrefsListener)
+        }
+
+        override fun onPause() {
+            super.onPause()
+            PreferenceManager.getDefaultSharedPreferences(requireContext())
+                .unregisterOnSharedPreferenceChangeListener(streamPrefsListener)
+        }
+
+        /** "auto" reads oddly on its own - pairs it with the quality preset it falls back to. */
+        private fun streamResSummary(value: String): String =
+            if (value == "auto") "Auto (matches the app's default quality)" else value
+
+        /** Applies a resolution/fps change live, the same way the web UI's own controls do - see
+         *  ACTION_RESTART_CAMERA. Only when the server's already running: startService() would
+         *  otherwise start the service fresh just to deliver this intent, which is exactly the
+         *  "only the hero button starts/stops the server" rule this app deliberately follows
+         *  everywhere else - a settings tweak must never be what brings the server up. */
+        private fun requestLiveCameraRestart() {
+            val settingsActivity = activity as? SettingsActivity ?: return
+            if (!settingsActivity.isServiceRunning()) return
+            settingsActivity.startService(Intent(settingsActivity, StreamingService::class.java).apply {
+                action = StreamingService.ACTION_RESTART_CAMERA
+            })
+        }
+
         override fun onCreatePreferences(savedInstanceState: Bundle?, rootKey: String?) {
             setPreferencesFromResource(R.xml.preferences, rootKey)
 
@@ -385,6 +434,36 @@ class SettingsActivity : AppCompatActivity() {
                         return@setOnPreferenceChangeListener false
                     }
                     summary = "Port $port"
+                    true
+                }
+            }
+
+            // Resolution/fps: same "stream_res"/"stream_fps" prefs the web UI's own controls
+            // write, and applied the same way - saved immediately, plus a live camera
+            // reconfigure (ACTION_RESTART_CAMERA) if the server's already running, so this
+            // behaves exactly like adjusting it from the web UI rather than like the locked
+            // auth fields above (which require a full server restart to take effect at all).
+            findPreference<ListPreference>("stream_res")?.apply {
+                summary = streamResSummary(value ?: "auto")
+                setOnPreferenceChangeListener { _, newValue ->
+                    summary = streamResSummary(newValue.toString())
+                    requestLiveCameraRestart()
+                    true
+                }
+            }
+            findPreference<EditTextPreference>("stream_fps")?.apply {
+                summary = "${text ?: "30"} fps"
+                setOnBindEditTextListener { editText ->
+                    editText.inputType = android.text.InputType.TYPE_CLASS_NUMBER
+                }
+                setOnPreferenceChangeListener { _, newValue ->
+                    val fps = newValue.toString().toIntOrNull()
+                    if (fps == null || fps !in 1..60) {
+                        Toast.makeText(requireContext(), "Frame rate must be between 1 and 60", Toast.LENGTH_LONG).show()
+                        return@setOnPreferenceChangeListener false
+                    }
+                    summary = "$fps fps"
+                    requestLiveCameraRestart()
                     true
                 }
             }

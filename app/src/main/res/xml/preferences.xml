@@ -69,6 +69,23 @@
             android:singleLine="true" />
     </PreferenceCategory>
 
+    <!-- Same "resolution"/"fps" remote-control keys the web UI's own controls write - stream_res
+         and stream_fps - so a change from either surface is visible on the other. -->
+    <PreferenceCategory android:title="Stream Quality">
+        <ListPreference
+            android:key="stream_res"
+            android:title="Resolution"
+            android:defaultValue="auto"
+            android:entries="@array/stream_resolution_entries"
+            android:entryValues="@array/stream_resolution_values" />
+        <EditTextPreference
+            android:key="stream_fps"
+            android:title="Frame Rate (fps)"
+            android:defaultValue="30"
+            android:inputType="number"
+            android:singleLine="true" />
+    </PreferenceCategory>
+
     <PreferenceCategory android:title="Recording">
         <CheckBoxPreference
             android:key="recording_enabled"

@@ -11,4 +11,27 @@
         <item>disabled</item>
     </string-array>
     <string name="streaming_active">🔴 Streaming active</string>
+    <!-- Mirrors what the web control UI's resolution dropdown can send (the "resolution" remote
+         control key): "auto" or an explicit WxH. The web UI additionally lists whatever exact
+         sizes the currently-selected camera reports, which isn't practical to duplicate here
+         without live camera introspection - these are common presets instead. Either way, the
+         requested size goes through the same nearest-match logic against the camera's actual
+         capabilities, so an unsupported preset here is no different from an unsupported one
+         picked in the web UI. -->
+    <string-array name="stream_resolution_entries">
+        <item>Auto</item>
+        <item>640×480</item>
+        <item>800×600 (Low)</item>
+        <item>960×720 (Medium)</item>
+        <item>1280×720 (High)</item>
+        <item>1920×1080 (Full HD)</item>
+    </string-array>
+    <string-array name="stream_resolution_values">
+        <item>auto</item>
+        <item>640x480</item>
+        <item>800x600</item>
+        <item>960x720</item>
+        <item>1280x720</item>
+        <item>1920x1080</item>
+    </string-array>
 </resources>

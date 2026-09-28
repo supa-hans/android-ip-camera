@@ -141,6 +141,12 @@ class StreamingService : LifecycleService() {
         const val ACTION_RESTART_NOTIFICATION = "com.github.digitallyrefined.androidipcamera.RESTART_NOTIFICATION"
         const val ACTION_RESTART_SERVER = "com.github.digitallyrefined.androidipcamera.RESTART_SERVER"
         const val ACTION_START_SERVER = "com.github.digitallyrefined.androidipcamera.START_SERVER"
+        // Lets the native Settings screen apply a resolution/fps change live, the same way the
+        // web UI's own controls do (which write the pref then call debouncedStartCamera()
+        // directly, in-process) - Settings isn't bound to the service, so it has no other way to
+        // reach that call. Only reconfigures the camera pipeline; the listening socket/port and
+        // any connected clients are untouched.
+        const val ACTION_RESTART_CAMERA = "com.github.digitallyrefined.androidipcamera.RESTART_CAMERA"
     }
 
     inner class LocalBinder : Binder() { fun getService(): StreamingService = this@StreamingService }
@@ -155,6 +161,10 @@ class StreamingService : LifecycleService() {
             // Cold start with no activity bound (e.g. from BootReceiver): the activity normally
             // calls startStreamingServer() after binding, so start it here instead.
             ACTION_START_SERVER -> startStreamingServer()
+            // No-op if the camera isn't actually running (e.g. server stopped, or no client has
+            // requested a stream yet) - the change is already saved to prefs either way, and
+            // takes effect whenever the camera does next start.
+            ACTION_RESTART_CAMERA -> if (captureRunning) debouncedStartCamera(force = true)
         }
         // A null intent means the system re-created this START_STICKY service after killing the
         // process. Nothing starts the server in that path — no activity binds, and onCreate() only
