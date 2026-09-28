@@ -1,9 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- The webcam glyph from the supplied icon artwork, flattened from gradients to flat fills
-     (negligible difference at launcher-icon sizes) and scaled down ~79% around its own center
-     so it sits inside the adaptive-icon safe zone instead of touching the edge of the 108dp
-     canvas - the original art fills its frame edge-to-edge, which is fine for a pre-rounded
-     single image but gets clipped if placed at full size behind a circular/squircle mask. -->
+     (negligible difference at launcher-icon sizes) and scaled down around its own center so it
+     sits inside the adaptive-icon safe zone with real padding around it, instead of touching the
+     edge of the 108dp canvas - the original art fills its frame edge-to-edge, which is fine for a
+     pre-rounded single image but gets clipped if placed at full size behind a circular/squircle
+     mask. -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp"
     android:height="108dp"
@@ -12,8 +13,8 @@
     <group
         android:pivotX="354"
         android:pivotY="354"
-        android:scaleX="0.79"
-        android:scaleY="0.79">
+        android:scaleX="0.62"
+        android:scaleY="0.62">
         <!-- Body / stand -->
         <path
             android:fillColor="#FFFFFF"

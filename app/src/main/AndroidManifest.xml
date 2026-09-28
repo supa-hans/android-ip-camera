@@ -32,7 +32,6 @@
              camera preview (MainActivity) is a secondary screen reached on demand from there. -->
         <activity
             android:name=".activities.SettingsActivity"
-            android:label="Settings"
             android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
