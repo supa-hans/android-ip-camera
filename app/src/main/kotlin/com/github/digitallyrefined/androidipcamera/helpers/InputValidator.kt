@@ -15,13 +15,14 @@ object InputValidator {
                username.matches(Regex("^[a-zA-Z0-9_-]+$"))
     }
 
-    // Password validation
+    // Password validation. Length-only: this password gates a LAN stream, not an account
+    // with financial/personal data behind it, so composition rules (uppercase/lowercase/digit)
+    // just get in the way of picking something you can actually type on a phone's Basic Auth
+    // prompt or from a config file. Length is still enforced against dumb accidents like an
+    // empty or absurdly long value.
     fun isValidPassword(password: String): Boolean {
         return password.length >= 8 &&
-               password.length <= 128 &&
-               password.contains(Regex("[A-Z]")) && // At least one uppercase
-               password.contains(Regex("[a-z]")) && // At least one lowercase
-               password.contains(Regex("[0-9]"))    // At least one digit
+               password.length <= 128
     }
 
     // Certificate path validation - STRENGTHENED for security

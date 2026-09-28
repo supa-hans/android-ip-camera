@@ -28,6 +28,7 @@ import androidx.preference.PreferenceManager
 import com.github.digitallyrefined.androidipcamera.R
 import com.github.digitallyrefined.androidipcamera.StreamingService
 import com.github.digitallyrefined.androidipcamera.databinding.ActivityMainBinding
+import com.google.android.material.color.DynamicColors
 import java.net.Inet4Address
 import java.net.NetworkInterface
 
@@ -116,6 +117,7 @@ class MainActivity : AppCompatActivity() {
     @SuppressLint("SetTextI18n")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        DynamicColors.applyToActivityIfAvailable(this)
 
         // Initialize view binding first
         viewBinding = ActivityMainBinding.inflate(layoutInflater)
@@ -387,7 +389,9 @@ class MainActivity : AppCompatActivity() {
     companion object {
         private const val TAG = "MainActivity"
         private const val REQUEST_CODE_PERMISSIONS = 10
-        private val REQUIRED_PERMISSIONS = when {
+        // Shared with SettingsActivity's hero Start/Stop button, which needs the same camera
+        // permission check before it can start the service without going through this activity.
+        val REQUIRED_PERMISSIONS = when {
             Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU -> arrayOf(
                 Manifest.permission.CAMERA,
                 Manifest.permission.POST_NOTIFICATIONS

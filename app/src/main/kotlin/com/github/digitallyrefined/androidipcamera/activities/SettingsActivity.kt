@@ -1,13 +1,18 @@
 package com.github.digitallyrefined.androidipcamera.activities
 
 import android.app.Activity
+import android.app.ActivityManager
+import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.app.ActivityCompat
+import androidx.core.content.ContextCompat
 import androidx.documentfile.provider.DocumentFile
 import androidx.preference.EditTextPreference
 import androidx.preference.Preference
@@ -18,14 +23,113 @@ import com.github.digitallyrefined.androidipcamera.StreamingService
 import com.github.digitallyrefined.androidipcamera.helpers.InputValidator
 import com.github.digitallyrefined.androidipcamera.helpers.RecordingsHelper
 import com.github.digitallyrefined.androidipcamera.helpers.SecureStorage
+import com.google.android.material.button.MaterialButton
+import com.google.android.material.color.DynamicColors
 
+/**
+ * The app's home screen. Nothing here auto-starts the camera or the server - it just shows
+ * whether the server is currently running and offers two explicit actions: start/stop it as a
+ * background service (no camera preview), or open the full camera view on demand.
+ */
 class SettingsActivity : AppCompatActivity() {
+    private lateinit var statusText: android.widget.TextView
+    private lateinit var startStopButton: MaterialButton
+    private var hasRequestedPermissions = false
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        supportFragmentManager
-            .beginTransaction()
-            .replace(android.R.id.content, SettingsFragment())
-            .commit()
+        // Lightweight Material You: this is the one line that pulls in wallpaper-derived colors
+        // on Android 12+, on top of the fixed Theme.AndroidIpCamera fallback everywhere else.
+        DynamicColors.applyToActivityIfAvailable(this)
+
+        setContentView(R.layout.activity_settings)
+
+        statusText = findViewById(R.id.heroStatusText)
+        startStopButton = findViewById(R.id.heroStartStopButton)
+        val viewCameraButton = findViewById<MaterialButton>(R.id.heroViewCameraButton)
+
+        startStopButton.setOnClickListener {
+            if (isServiceRunning()) {
+                stopCameraServer()
+            } else {
+                startCameraServer()
+            }
+        }
+
+        viewCameraButton.setOnClickListener {
+            startActivity(Intent(this, MainActivity::class.java))
+        }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        refreshHeroState()
+    }
+
+    private fun refreshHeroState() {
+        val running = isServiceRunning()
+        startStopButton.text = if (running) "Stop Camera Server" else "Start Camera Server"
+        statusText.text = if (running) "Camera server is running" else "Camera server is stopped"
+    }
+
+    private fun isServiceRunning(): Boolean {
+        val manager = getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
+        @Suppress("DEPRECATION")
+        return manager.getRunningServices(Int.MAX_VALUE).any {
+            it.service.className == StreamingService::class.java.name
+        }
+    }
+
+    private fun allPermissionsGranted() = MainActivity.REQUIRED_PERMISSIONS.all {
+        ContextCompat.checkSelfPermission(this, it) == android.content.pm.PackageManager.PERMISSION_GRANTED
+    }
+
+    private fun startCameraServer() {
+        if (!allPermissionsGranted()) {
+            if (!hasRequestedPermissions) {
+                hasRequestedPermissions = true
+                ActivityCompat.requestPermissions(this, MainActivity.REQUIRED_PERMISSIONS, REQUEST_CODE_PERMISSIONS)
+            } else {
+                Toast.makeText(this, "Camera permission is required. Enable it in App Settings.", Toast.LENGTH_LONG).show()
+            }
+            return
+        }
+        // Same path BootReceiver uses: the service starts the streaming server itself, no bound
+        // activity or camera preview required.
+        val intent = Intent(this, StreamingService::class.java).apply {
+            action = StreamingService.ACTION_START_SERVER
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            startForegroundService(intent)
+        } else {
+            startService(intent)
+        }
+        Toast.makeText(this, "Starting camera server...", Toast.LENGTH_SHORT).show()
+        Handler(Looper.getMainLooper()).postDelayed({ refreshHeroState() }, 800)
+    }
+
+    private fun stopCameraServer() {
+        val intent = Intent(this, StreamingService::class.java).apply {
+            action = StreamingService.ACTION_STOP_SERVICE
+        }
+        startService(intent)
+        Toast.makeText(this, "Stopping camera server...", Toast.LENGTH_SHORT).show()
+        Handler(Looper.getMainLooper()).postDelayed({ refreshHeroState() }, 800)
+    }
+
+    override fun onRequestPermissionsResult(
+        requestCode: Int,
+        permissions: Array<String>,
+        grantResults: IntArray
+    ) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode == REQUEST_CODE_PERMISSIONS && allPermissionsGranted()) {
+            startCameraServer()
+        }
+    }
+
+    companion object {
+        private const val REQUEST_CODE_PERMISSIONS = 11
     }
 
     class SettingsFragment : PreferenceFragmentCompat() {
@@ -138,7 +242,7 @@ class SettingsActivity : AppCompatActivity() {
                     if (!InputValidator.isValidPassword(password)) {
                         Toast.makeText(
                             requireContext(),
-                            "Password must be 8-128 characters with uppercase, lowercase, and number",
+                            "Password must be 8-128 characters",
                             Toast.LENGTH_LONG
                         ).show()
                         return@setOnPreferenceChangeListener false

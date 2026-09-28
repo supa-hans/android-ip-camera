@@ -1,8 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto">
+    <!-- Auth and TLS/certificate settings live together: both are "how do I lock this down"
+         questions, and someone setting up access control wants to see all of it in one place
+         rather than hunting across two separate sections. -->
     <PreferenceCategory
-        android:title="Authentication">
+        android:title="Security">
         <CheckBoxPreference
             android:key="enable_auth"
             android:title="Enable Authentication"
@@ -25,10 +28,33 @@
             android:summary="Comma-separated LAN IPs (e.g. an NVR like Frigate) that skip the login prompt entirely. Leave blank to require auth from everyone."
             android:defaultValue=""
             android:singleLine="true" />
+        <ListPreference
+            android:key="tls_version"
+            android:title="TLS Version"
+            android:summary="Automatically use the newest platform TLS, force TLS 1.2, or disable HTTPS"
+            android:defaultValue="1.3"
+            android:entries="@array/tls_version_entries"
+            android:entryValues="@array/tls_version_values" />
+        <Preference
+            android:key="certificate_path"
+            android:title="Custom TLS Certificate"
+            android:summary="Select your own certificate"
+            android:persistent="true" />
+        <EditTextPreference
+            android:key="certificate_password"
+            android:title="Certificate Password"
+            android:summary="Optional password for the TLS certificate"
+            android:persistent="true"
+            android:inputType="textPassword" />
+        <Preference
+            android:key="test_certificate"
+            android:title="Test Certificate Setup"
+            android:summary="Validate your certificate configuration"
+            android:persistent="false" />
     </PreferenceCategory>
 
     <PreferenceCategory
-        android:title="Startup">
+        android:title="Server">
         <CheckBoxPreference
             android:key="start_on_boot"
             android:title="Start on Boot"
@@ -44,39 +70,22 @@
     </PreferenceCategory>
 
     <PreferenceCategory android:title="Recording">
+        <CheckBoxPreference
+            android:key="recording_enabled"
+            android:title="Enable On-Device Recording"
+            android:summary="Allow saving recordings to this device. Turn off if you only want to stream live (e.g. to Frigate/Home Assistant) - the record button disappears from the web UI and the /record endpoints are disabled."
+            android:defaultValue="true" />
         <Preference
             android:key="recording_storage_uri"
             android:title="Recording Storage Location"
             android:summary="Recordings are saved to Movies/AndroidIPCamera on the internal storage. Tap to pick a different folder, for example on an SD card."
-            android:persistent="true" />
+            android:persistent="true"
+            android:dependency="recording_enabled" />
         <Preference
             android:key="reset_recording_storage"
             android:title="Reset to Default Location"
             android:summary="Save recordings back to Movies/AndroidIPCamera"
-            android:persistent="false" />
-    </PreferenceCategory>
-
-    <PreferenceCategory android:title="Certificate Settings">
-        <ListPreference
-            android:key="tls_version"
-            android:title="TLS Version"
-            android:summary="Automatically use the newest platform TLS, force TLS 1.2, or disable HTTPS"
-            android:defaultValue="1.3"
-            android:entries="@array/tls_version_entries"
-            android:entryValues="@array/tls_version_values" />
-        <Preference
-            android:key="certificate_path"
-            android:title="Custom TLS Certificate" android:summary="Select your own certificate" android:persistent="true" />
-        <EditTextPreference
-            android:key="certificate_password"
-            android:title="Certificate Password"
-            android:summary="Optional password for the TLS certificate"
-            android:persistent="true"
-            android:inputType="textPassword" />
-        <Preference
-            android:key="test_certificate"
-            android:title="Test Certificate Setup"
-            android:summary="Validate your certificate configuration"
-            android:persistent="false" />
+            android:persistent="false"
+            android:dependency="recording_enabled" />
     </PreferenceCategory>
 </PreferenceScreen>

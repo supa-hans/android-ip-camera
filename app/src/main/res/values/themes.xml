@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Lightweight Material You: a Material 3 theme applied to the existing native
+         PreferenceFragmentCompat settings screen and MainActivity, not a Compose rewrite. On
+         Android 12+ DynamicColors.applyToActivityIfAvailable() (called from each activity's
+         onCreate) overrides these with colors derived from the user's wallpaper; everywhere else
+         these fixed brand colors are the fallback. -->
+    <style name="Theme.AndroidIpCamera" parent="Theme.Material3.DayNight.NoActionBar">
+        <item name="colorPrimary">@color/brand_primary</item>
+        <item name="colorOnPrimary">@color/brand_on_primary</item>
+        <item name="colorPrimaryContainer">@color/brand_primary_container</item>
+        <item name="colorOnPrimaryContainer">@color/brand_on_primary_container</item>
+        <item name="colorSecondary">@color/brand_secondary</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+    </style>
+</resources>

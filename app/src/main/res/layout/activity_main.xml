@@ -39,22 +39,25 @@
             android:id="@+id/settingsButton"
             android:layout_width="48dp"
             android:layout_height="48dp"
+            android:padding="10dp"
             android:background="@android:color/transparent"
-            android:src="@android:drawable/ic_menu_preferences"
+            android:src="@drawable/ic_settings"
             android:contentDescription="Settings" />
         <ImageButton
             android:id="@+id/hidePreviewButton"
             android:layout_width="48dp"
             android:layout_height="48dp"
+            android:padding="10dp"
             android:background="@android:color/transparent"
-            android:src="@android:drawable/ic_menu_view"
+            android:src="@drawable/ic_visibility"
             android:contentDescription="Toggle Preview" />
         <ImageButton
             android:id="@+id/exitButton"
             android:layout_width="48dp"
             android:layout_height="48dp"
+            android:padding="10dp"
             android:background="@android:color/transparent"
-            android:src="@android:drawable/ic_menu_close_clear_cancel"
+            android:src="@drawable/ic_close"
             android:contentDescription="Exit App" />
     </LinearLayout>
 

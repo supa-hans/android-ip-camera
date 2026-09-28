@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="?attr/colorSurface">
+
+    <!-- Hero: the first thing you see on launch. Nothing here starts the camera or the server
+         by itself - it's just status plus two explicit actions. -->
+    <LinearLayout
+        android:id="@+id/heroContainer"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:paddingHorizontal="20dp"
+        android:paddingTop="28dp"
+        android:paddingBottom="16dp"
+        android:background="?attr/colorPrimaryContainer">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Android IP Camera"
+            android:textSize="22sp"
+            android:textStyle="bold"
+            android:textColor="?attr/colorOnPrimaryContainer" />
+
+        <TextView
+            android:id="@+id/heroStatusText"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:textSize="15sp"
+            android:textColor="?attr/colorOnPrimaryContainer"
+            android:alpha="0.85"
+            android:text="Checking status..." />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/heroStartStopButton"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:text="Start Camera Server" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/heroViewCameraButton"
+            style="@style/Widget.Material3.Button.OutlinedButton"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:text="View Camera" />
+
+    </LinearLayout>
+
+    <androidx.fragment.app.FragmentContainerView
+        android:id="@+id/settingsFragmentContainer"
+        android:name="com.github.digitallyrefined.androidipcamera.activities.SettingsActivity$SettingsFragment"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1" />
+
+</LinearLayout>

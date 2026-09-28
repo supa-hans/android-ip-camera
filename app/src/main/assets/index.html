@@ -69,6 +69,14 @@
       gap: 5px;
     }
 
+    .status-overlay span.warn {
+      color: #ffb300;
+    }
+
+    .status-overlay span.critical {
+      color: #ff5252;
+    }
+
     .stream-loading {
       position: absolute;
       inset: 0;
@@ -307,6 +315,7 @@
       <div id="statusOverlay" class="status-overlay" style="display: none;">
         <span id="wifiStatus" title="WiFi Strength">🛜 --%</span>
         <span id="batteryStatus" title="Battery Status">🔋 --%</span>
+        <span id="tempStatus" title="Battery Temperature" style="display:none;">🌡️ --°C</span>
       </div>
       <div id="streamLoading" class="stream-loading">Loading...</div>
       <canvas id='streamCanvas'></canvas>
@@ -419,16 +428,11 @@
               style="width:50px; padding:4px 6px; font-size:13px; text-align:center; background:#333; color:#fff; border:1px solid #555; border-radius:4px; margin:0;">
           </div>
 
+          <!-- Battery % and temperature now live in the overlay above the stream itself
+               (statusOverlay) alongside WiFi strength, so this tile only needs to carry
+               thermal throttling status, which doesn't fit as a compact overlay pill. -->
           <p class="group-title">Device Health</p>
           <div class="device-health" id="deviceHealth">
-            <div class="device-health-stat">
-              <span class="device-health-label">Battery</span>
-              <span class="device-health-value" id="healthBattery">&mdash;</span>
-            </div>
-            <div class="device-health-stat">
-              <span class="device-health-label">Temperature</span>
-              <span class="device-health-value" id="healthTemp">&mdash;</span>
-            </div>
             <div class="device-health-stat">
               <span class="device-health-label">Thermal</span>
               <span class="device-health-value" id="healthThermal">&mdash;</span>
@@ -1503,7 +1507,6 @@
     function updateStatusOverlay(data) {
       const batteryEl = getElById('batteryStatus');
       const wifiEl = getElById('wifiStatus');
-      const overlay = getElById('statusOverlay');
 
       if (batteryEl && typeof data.batteryPercent === 'number') {
         if (data.batteryPercent < 0) {
@@ -1528,11 +1531,17 @@
         }
       }
 
-      if (overlay) {
-        const hasStatus = (batteryEl && batteryEl.style.display !== 'none') ||
-          (wifiEl && wifiEl.style.display !== 'none');
-        overlay.style.display = hasStatus ? 'flex' : 'none';
-      }
+      updateOverlayVisibility();
+    }
+
+    function updateOverlayVisibility() {
+      const overlay = getElById('statusOverlay');
+      if (!overlay) return;
+      const spans = ['batteryStatus', 'wifiStatus', 'tempStatus']
+        .map(getElById)
+        .filter(Boolean);
+      const hasStatus = spans.some(el => el.style.display !== 'none');
+      overlay.style.display = hasStatus ? 'flex' : 'none';
     }
 
     function loadDeviceInfo(applySettings) {
@@ -1575,6 +1584,13 @@
     let isRecording = false;
     function updateRecordingUi(statusData) {
       const toggleBtn = getElById('recordToggleBtn');
+      if (statusData?.enabled === false) {
+        // On-device recording is turned off in Settings - hide the button entirely
+        // rather than show a control that will just 403 when pressed.
+        if (toggleBtn) toggleBtn.style.display = 'none';
+        return;
+      }
+      if (toggleBtn) toggleBtn.style.display = '';
       isRecording = !!(statusData?.recording);
       if (isRecording) {
         const secs = Math.floor((statusData.durationMs || 0) / 1000);
@@ -1602,31 +1618,25 @@
         .catch(() => {});
     }
 
-    // Device Health panel — battery/temperature/thermal-throttling, polled independently of
-    // the stream itself so it keeps working even if the video feed stalls.
+    // Device Health — battery temperature goes into the overlay pill above the stream
+    // (alongside battery % and WiFi strength); only thermal throttling status stays in the
+    // sidebar tile, since "moderate throttling" doesn't compress into a couple of overlay chars.
+    // Polled independently of the stream itself so it keeps working even if the video feed stalls.
     function updateDeviceHealth(data) {
-      const batteryEl = getElById('healthBattery');
-      const tempEl = getElById('healthTemp');
+      const tempEl = getElById('tempStatus');
       const thermalEl = getElById('healthThermal');
-
-      if (batteryEl) {
-        if (typeof data.battery_pct === 'number') {
-          const charging = data.charging ? ' ⚡' : '';
-          batteryEl.textContent = `${data.battery_pct}%${charging}`;
-        } else {
-          batteryEl.textContent = '—';
-        }
-      }
 
       if (tempEl) {
         if (typeof data.battery_temp_c === 'number') {
-          tempEl.textContent = `${data.battery_temp_c.toFixed(1)}°C`;
+          tempEl.style.display = 'flex';
+          tempEl.textContent = `🌡️ ${data.battery_temp_c.toFixed(1)}°C`;
           tempEl.classList.toggle('warn', data.battery_temp_c >= 40 && data.battery_temp_c < 45);
           tempEl.classList.toggle('critical', data.battery_temp_c >= 45);
         } else {
-          tempEl.textContent = '—';
+          tempEl.style.display = 'none';
           tempEl.classList.remove('warn', 'critical');
         }
+        updateOverlayVisibility();
       }
 
       if (thermalEl) {

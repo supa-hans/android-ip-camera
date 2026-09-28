@@ -952,7 +952,22 @@ class StreamingServerHelper(
             }
 
             // ---- Recording endpoints ----
+            // "recording_enabled" lets a user who only wants live streaming (no on-device
+            // recording at all) turn the feature off entirely. When disabled, these routes
+            // don't just no-op silently - they return a clear 403 so callers (and the web UI)
+            // know recording isn't available on this device, rather than getting a confusing
+            // "not recording" or "unavailable" response.
+            val recordingEnabled = prefs.getBoolean("recording_enabled", true)
             if (path == "/record/start" && requestParts[0] == "POST") {
+                if (!recordingEnabled) {
+                    writer.print("HTTP/1.1 403 Forbidden\r\n")
+                    writer.print("Content-Type: application/json\r\n")
+                    writer.print("Connection: close\r\n\r\n")
+                    writer.print("""{"error":"recording_disabled"}""")
+                    writer.flush()
+                    try { socket.close() } catch (_: Exception) {}
+                    return
+                }
                 val (_, status, json) = onRecordStart()
                 writer.print("HTTP/1.1 $status\r\n")
                 writer.print("Content-Type: application/json\r\n")
@@ -964,6 +979,15 @@ class StreamingServerHelper(
             }
 
             if (path == "/record/stop" && requestParts[0] == "POST") {
+                if (!recordingEnabled) {
+                    writer.print("HTTP/1.1 403 Forbidden\r\n")
+                    writer.print("Content-Type: application/json\r\n")
+                    writer.print("Connection: close\r\n\r\n")
+                    writer.print("""{"error":"recording_disabled"}""")
+                    writer.flush()
+                    try { socket.close() } catch (_: Exception) {}
+                    return
+                }
                 val (_, status, json) = onRecordStop()
                 writer.print("HTTP/1.1 $status\r\n")
                 writer.print("Content-Type: application/json\r\n")
@@ -975,7 +999,11 @@ class StreamingServerHelper(
             }
 
             if (path == "/record/status") {
-                val json = onRecordStatus()
+                val json = if (!recordingEnabled) {
+                    """{"recording":false,"enabled":false}"""
+                } else {
+                    onRecordStatus()
+                }
                 writer.print("HTTP/1.1 200 OK\r\n")
                 writer.print("Content-Type: application/json\r\n")
                 writer.print("Connection: close\r\n\r\n")

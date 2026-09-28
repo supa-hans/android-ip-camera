@@ -26,9 +26,13 @@
         android:label="Android IP Camera"
         android:icon="@mipmap/ic_launcher"
         android:roundIcon="@mipmap/ic_launcher"
-        android:theme="@style/Theme.AppCompat.Light.DarkActionBar">
+        android:theme="@style/Theme.AndroidIpCamera">
+        <!-- Settings is now the app's home screen: it opens with a hero Start/Stop control for
+             the camera server, so nothing starts automatically just by opening the app. The
+             camera preview (MainActivity) is a secondary screen reached on demand from there. -->
         <activity
-            android:name=".activities.MainActivity"
+            android:name=".activities.SettingsActivity"
+            android:label="Settings"
             android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
@@ -36,9 +40,10 @@
             </intent-filter>
         </activity>
         <activity
-            android:name=".activities.SettingsActivity"
-            android:label="Settings"
-            android:parentActivityName=".activities.MainActivity" />
+            android:name=".activities.MainActivity"
+            android:label="Camera"
+            android:exported="false"
+            android:parentActivityName=".activities.SettingsActivity" />
 
         <service
             android:name=".StreamingService"
