@@ -50,6 +50,20 @@
                 android:text="Checking status..." />
         </LinearLayout>
 
+        <TextView
+            android:id="@+id/heroIpAddressText"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:textSize="13sp"
+            android:textColor="?attr/colorOnPrimaryContainer"
+            android:alpha="0.7"
+            android:foreground="?attr/selectableItemBackground"
+            android:clickable="true"
+            android:focusable="true"
+            android:paddingVertical="2dp"
+            android:text="https://0.0.0.0:4444" />
+
         <com.google.android.material.button.MaterialButton
             android:id="@+id/heroStartStopButton"
             android:layout_width="match_parent"

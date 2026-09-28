@@ -38,6 +38,7 @@ import java.io.InputStreamReader
 import java.io.OutputStream
 import java.io.PrintWriter
 import java.net.InetAddress
+import java.net.InetSocketAddress
 import java.net.ServerSocket
 import java.net.Socket
 import java.net.URLDecoder
@@ -525,12 +526,23 @@ class StreamingServerHelper(
                                       val sslServerSocketFactory = sslContext.serverSocketFactory
                                       for (bindAttempt in 0..SOCKET_BIND_MAX_RETRIES) {
                                           try {
-                                              sslServerSocket = (sslServerSocketFactory.createServerSocket(port, 50, bindAddress) as SSLServerSocket).apply {
+                                              // createServerSocket(port, backlog, addr) binds immediately, before
+                                              // reuseAddress could be applied to it - SO_REUSEADDR only affects a
+                                              // bind() call made after it's set, so setting it on an
+                                              // already-bound socket (the old code) was a no-op and left a
+                                              // just-restarted server with no protection against the OS still
+                                              // holding the previous socket in TIME_WAIT. Creating an unbound
+                                              // socket, setting reuseAddress, then binding explicitly is what
+                                              // actually lets a restart reclaim the port immediately instead of
+                                              // relying on the retry loop below to outlast the OS.
+                                              val socket = (sslServerSocketFactory.createServerSocket() as SSLServerSocket).apply {
                                                   reuseAddress = true
                                                   enabledProtocols = arrayOf(tlsVersion)
                                                   // Don't restrict cipher suites - let the system negotiate
                                                   soTimeout = 30000
                                               }
+                                              socket.bind(InetSocketAddress(bindAddress, port), 50)
+                                              sslServerSocket = socket
                                               onLog("Server started with TLS $tlsVersion")
                                               break
                                           } catch (bindEx: IOException) {
@@ -565,8 +577,22 @@ class StreamingServerHelper(
                           readyServerSocket
                       } catch (keystoreException: Exception) {
                           Handler(Looper.getMainLooper()).post {
-                              onLog("Certificate loading failed: ${keystoreException.message}")
+                              // This block wraps both certificate/keystore loading AND the bind-retry
+                              // loop above, so a plain "port still in use" failure (no cert problem at
+                              // all) used to be logged as "Certificate loading failed" - misleading
+                              // when debugging. Bind failures get their own message here instead.
+                              val msg = keystoreException.message ?: ""
+                              val isBindFailure = msg.contains("Address already in use") ||
+                                  msg.contains("BindException") ||
+                                  msg.contains("errno = 48") ||
+                                  msg.contains("EADDRINUSE")
+                              onLog(
+                                  if (isBindFailure) "Server failed to bind: $msg"
+                                  else "Certificate loading failed: $msg"
+                              )
                               val errorMsg = when {
+                                  isBindFailure ->
+                                      "Port $port is still in use, try again in a few seconds"
                                   keystoreException.message?.contains("password") == true ->
                                       "Certificate password is incorrect, check Settings > Advanced Security"
                                   keystoreException.message?.contains("keystore") == true ->
@@ -584,10 +610,14 @@ class StreamingServerHelper(
                           var httpSocket: ServerSocket? = null
                           for (bindAttempt in 0..SOCKET_BIND_MAX_RETRIES) {
                               try {
-                                  httpSocket = ServerSocket(port, 50, bindAddress).apply {
+                                  // Same fix as the TLS path above: bind explicitly after setting
+                                  // reuseAddress, rather than via the constructor that binds first.
+                                  val socket = ServerSocket().apply {
                                       reuseAddress = true
                                       soTimeout = 30000
                                   }
+                                  socket.bind(InetSocketAddress(bindAddress, port), 50)
+                                  httpSocket = socket
                                   break
                               } catch (e: IOException) {
                                   val msg = e.message ?: ""

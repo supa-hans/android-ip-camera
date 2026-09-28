@@ -40,6 +40,7 @@ import com.google.android.material.color.DynamicColors
 class SettingsActivity : AppCompatActivity() {
     private lateinit var statusText: android.widget.TextView
     private lateinit var statusDot: View
+    private lateinit var ipAddressText: android.widget.TextView
     private lateinit var startStopButton: MaterialButton
     private var hasRequestedPermissions = false
     private var dotPulseAnimator: ObjectAnimator? = null
@@ -54,6 +55,7 @@ class SettingsActivity : AppCompatActivity() {
 
         statusText = findViewById(R.id.heroStatusText)
         statusDot = findViewById(R.id.heroStatusDot)
+        ipAddressText = findViewById(R.id.heroIpAddressText)
         startStopButton = findViewById(R.id.heroStartStopButton)
         val viewCameraButton = findViewById<MaterialButton>(R.id.heroViewCameraButton)
 
@@ -67,6 +69,31 @@ class SettingsActivity : AppCompatActivity() {
 
         viewCameraButton.setOnClickListener {
             startActivity(Intent(this, MainActivity::class.java))
+        }
+
+        ipAddressText.setOnClickListener { copyIpAddressToClipboard() }
+    }
+
+    private fun getLocalIpAddress(): String {
+        try {
+            java.net.NetworkInterface.getNetworkInterfaces().toList().forEach { networkInterface ->
+                networkInterface.inetAddresses.toList().forEach { address ->
+                    if (!address.isLoopbackAddress && address is java.net.Inet4Address) {
+                        return address.hostAddress ?: "unknown"
+                    }
+                }
+            }
+        } catch (_: Exception) {}
+        return "unknown"
+    }
+
+    private fun copyIpAddressToClipboard() {
+        val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+        clipboard.setPrimaryClip(android.content.ClipData.newPlainText("Camera URL", ipAddressText.text))
+        // Android 13+ already shows its own "Copied" system toast for clipboard changes, so
+        // showing our own here would just double up.
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
+            Toast.makeText(this, "Copied to clipboard", Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -87,6 +114,12 @@ class SettingsActivity : AppCompatActivity() {
         val running = isServiceRunning()
         startStopButton.text = if (running) "Stop Camera Server" else "Start Camera Server"
         statusText.text = if (running) "Camera server is running" else "Camera server is stopped"
+
+        val prefs = PreferenceManager.getDefaultSharedPreferences(this)
+        val tlsVersion = prefs.getString("tls_version", "1.3") ?: "1.3"
+        val protocol = if (tlsVersion == "disabled") "http" else "https"
+        val port = prefs.getString("server_port", "4444")?.toIntOrNull() ?: 4444
+        ipAddressText.text = "$protocol://${getLocalIpAddress()}:$port"
 
         val dotColor = if (running) 0xFF4CAF50.toInt() else 0xFF9E9E9E.toInt()
         ViewCompat.setBackgroundTintList(statusDot, ColorStateList.valueOf(dotColor))
@@ -239,6 +272,9 @@ class SettingsActivity : AppCompatActivity() {
                     // Show/hide username and password preferences
                     findPreference<EditTextPreference>("username")?.isVisible = enabled
                     findPreference<EditTextPreference>("password")?.isVisible = enabled
+                    // Whether username/password are "required" in their summary depends on this
+                    // toggle, so refresh them too.
+                    refreshAuthFieldLockState((activity as? SettingsActivity)?.isServiceRunning() == true)
                     // Takes effect next time the server is started from the hero button - nothing
                     // here touches the running server.
                     true
@@ -278,6 +314,7 @@ class SettingsActivity : AppCompatActivity() {
                     }
                     // Store securely (empty string means use default)
                     secureStorage.putSecureString(SecureStorage.KEY_USERNAME, username)
+                    refreshAuthFieldLockState((activity as? SettingsActivity)?.isServiceRunning() == true)
                     true
                 }
             }
@@ -309,6 +346,7 @@ class SettingsActivity : AppCompatActivity() {
 
                     // Store securely only; do not persist plaintext in SharedPreferences
                     secureStorage.putSecureString(SecureStorage.KEY_PASSWORD, password)
+                    refreshAuthFieldLockState((activity as? SettingsActivity)?.isServiceRunning() == true)
                     // Returning false prevents EditTextPreference from saving the plaintext
                     false
                 }
@@ -459,20 +497,39 @@ class SettingsActivity : AppCompatActivity() {
 
         }
 
-        /** Called on creation and whenever the hero's running state changes. Locks the auth
-         *  options while the server is running: only the hero button starts/stops the server, so
-         *  these can't take effect until then anyway - locking them avoids the false impression
-         *  that a change here has any live effect on the running server. */
+        /** Username/password summary, at a glance: whether something is actually configured,
+         *  not just whether the field is locked. Auth requires both to be set - if it's enabled
+         *  with either one blank, every connection gets rejected (see StreamingServerHelper's
+         *  403 path), so an empty field is flagged rather than just left blank-looking. */
+        private fun authFieldSummary(filledLabel: String?, authEnabled: Boolean, locked: Boolean): String {
+            val base = when {
+                filledLabel != null -> "✓ $filledLabel"
+                authEnabled -> "⚠ Not set — required while authentication is enabled"
+                else -> "Not set"
+            }
+            return if (locked) "$base  ·  stop the server to change this" else base
+        }
+
+        /** Called on creation and whenever the hero's running state changes, or the auth
+         *  toggle/username/password themselves change. Locks the auth options while the server
+         *  is running: only the hero button starts/stops the server, so these can't take effect
+         *  until then anyway - locking them avoids the false impression that a change here has
+         *  any live effect on the running server. Also shows, at a glance, whether username and
+         *  password are actually filled in. */
         fun refreshAuthFieldLockState(serverRunning: Boolean) {
-            val lockedSummary = if (serverRunning) "Stop the server to change this" else null
+            val authEnabled = findPreference<androidx.preference.CheckBoxPreference>("enable_auth")?.isChecked == true
+            val secureStorage = SecureStorage(requireContext())
+            val currentUsername = secureStorage.getSecureString(SecureStorage.KEY_USERNAME, "")
+            val passwordIsSet = !secureStorage.getSecureString(SecureStorage.KEY_PASSWORD, "").isNullOrEmpty()
+
             findPreference<androidx.preference.CheckBoxPreference>("enable_auth")?.isEnabled = !serverRunning
             findPreference<EditTextPreference>("username")?.apply {
                 isEnabled = !serverRunning
-                summary = lockedSummary
+                summary = authFieldSummary(currentUsername?.takeIf { it.isNotEmpty() }, authEnabled, serverRunning)
             }
             findPreference<EditTextPreference>("password")?.apply {
                 isEnabled = !serverRunning
-                summary = lockedSummary
+                summary = authFieldSummary(if (passwordIsSet) "Password set" else null, authEnabled, serverRunning)
             }
             findPreference<EditTextPreference>("trusted_ips")?.isEnabled = !serverRunning
         }
