@@ -1,10 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
-<vector xmlns:android="http://schemas.android.com/apk/res/android"
-    android:width="108dp"
-    android:height="108dp"
-    android:viewportWidth="108"
-    android:viewportHeight="108">
-    <path
-        android:fillColor="#1A237E"
-        android:pathData="M0,0h108v108h-108z" />
-</vector>
+<!-- Matches the gradient from the supplied app icon artwork (light blue #3f7de8 at the
+     bottom-left to darker blue #2866d2 at the top-right). -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <gradient
+        android:type="linear"
+        android:angle="45"
+        android:startColor="#3F7DE8"
+        android:endColor="#2866D2" />
+</shape>

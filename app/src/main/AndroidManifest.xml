@@ -25,7 +25,7 @@
     <application
         android:label="Android IP Camera"
         android:icon="@mipmap/ic_launcher"
-        android:roundIcon="@mipmap/ic_launcher"
+        android:roundIcon="@mipmap/ic_launcher_round"
         android:theme="@style/Theme.AndroidIpCamera">
         <!-- Settings is now the app's home screen: it opens with a hero Start/Stop control for
              the camera server, so nothing starts automatically just by opening the app. The
