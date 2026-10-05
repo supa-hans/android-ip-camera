@@ -1,0 +1,62 @@
+name: Release
+
+# Builds signed release APKs on GitHub's own runners and attaches them to a
+# GitHub Release. Triggers on a version tag push (e.g. `git tag v0.15.0 && git
+# push origin v0.15.0`), or manually from the Actions tab.
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Java
+        uses: actions/setup-java@v6.0.1
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v4
+        with:
+          packages: 'platform-tools'
+
+      - name: Install SDK components
+        run: sdkmanager "platforms;android-34" "build-tools;34.0.0"
+
+      - name: Decode signing keystore
+        run: echo "${{ secrets.SIGNING_KEYSTORE_BASE64 }}" | base64 -d > app/signing-key.jks
+
+      - name: Write signing.properties
+        run: |
+          cat > signing.properties <<EOF
+          storeFile=signing-key.jks
+          storePassword=${{ secrets.SIGNING_STORE_PASSWORD }}
+          keyAlias=${{ secrets.SIGNING_KEY_ALIAS }}
+          keyPassword=${{ secrets.SIGNING_KEY_PASSWORD }}
+          EOF
+
+      - name: Build signed release APKs
+        run: |
+          ./gradlew clean :app:assembleRelease \
+            --no-daemon \
+            --max-workers=1 \
+            -Dorg.gradle.parallel=false
+
+      - name: Clean up keystore
+        if: always()
+        run: rm -f app/signing-key.jks signing.properties
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: app/build/outputs/apk/release/*.apk
+          generate_release_notes: true
