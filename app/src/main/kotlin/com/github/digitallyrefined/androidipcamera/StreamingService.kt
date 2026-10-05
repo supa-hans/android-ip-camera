@@ -401,7 +401,19 @@ class StreamingService : LifecycleService() {
                 onSnapshot = { id -> snapshot(id) },
                 onRecordStart = { startRecording() },
                 onRecordStop = { stopRecording() },
-                onRecordStatus = { getRecordingStatus() }
+                onRecordStatus = { getRecordingStatus() },
+                // Remote "Restart server" needs to recover more than a dead listening socket - a
+                // wedged encoder (drain thread stuck on a blocking client-socket close, see
+                // StreamingServerHelper.closeAbortively) leaves the socket and foreground service
+                // looking perfectly healthy while nothing streams. Force a real camera/encoder
+                // restart the same way ACTION_RESTART_CAMERA / switchCamera() do. No-op if the
+                // camera isn't actually running, same as ACTION_RESTART_CAMERA.
+                onFullRestart = {
+                    launchMain {
+                        if (localRecorder?.isRecording == true) return@launchMain
+                        if (captureRunning) debouncedStartCamera(force = true)
+                    }
+                }
             )
             // Initialize encoders with the streaming server helper
             h264StreamingEncoder = H264StreamingEncoder(this, streamingServerHelper!!) { Log.i(TAG, "H264: $it"); onLog?.invoke(it) }

@@ -70,7 +70,12 @@ class StreamingServerHelper(
     private val onSnapshot: (String) -> ByteArray? = { null },
     private val onRecordStart: () -> Triple<Boolean, String, String> = { Triple(false, "503 Service Unavailable", """{"error":"unavailable"}""") },
     private val onRecordStop: () -> Triple<Boolean, String, String> = { Triple(false, "409 Conflict", """{"error":"not_recording"}""") },
-    private val onRecordStatus: () -> String = { """{"recording":false}""" }
+    private val onRecordStatus: () -> String = { """{"recording":false}""" },
+    // Full remote recovery for /control/restart-server: a plain socket restart never touches the
+    // camera/encoder pipeline, so it can't recover a wedged encoder (e.g. a drain thread stuck on
+    // a blocking socket close - see closeAbortively). This lets the caller force a real camera
+    // restart too, with no other way to reach it when you're not physically at the phone.
+    private val onFullRestart: () -> Unit = {}
 ) {
     data class Client(
         val socket: Socket,
@@ -147,9 +152,25 @@ class StreamingServerHelper(
     fun getClients(): List<Client> = clients.toList()
     fun getH264Clients(): List<Client> = h264Clients.toList()
     fun resetH264Wait() { h264Clients.forEach { it.waitingKey = true } }  // resync viewers at next keyframe
+
+    /**
+     * Close a client socket abortively (RST) instead of gracefully.
+     *
+     * A plain [Socket.close] on a live SSLSocket performs the TLS close_notify handshake, which
+     * writes to and reads from the peer. If the peer's TCP window is closed (flaky WiFi, a NAT
+     * reassigning the connection, an NVR client that stopped reading), that handshake can block
+     * indefinitely — and there is no timeout anywhere in this call chain. When that happens on a
+     * single-threaded caller such as the hardware encoder's drain thread, the whole pipeline wedges
+     * forever. setSoLinger(true, 0) forces an immediate RST close instead, which never blocks.
+     */
+    private fun closeAbortively(socket: Socket) {
+        try { socket.setSoLinger(true, 0) } catch (_: Exception) {}
+        try { socket.close() } catch (_: Exception) {}
+    }
+
     fun removeH264Client(client: Client) {
         if (!h264Clients.remove(client)) return
-        try { client.socket.close() } catch (_: Exception) {}
+        closeAbortively(client.socket)
         onClientDisconnected()
     }
 
@@ -230,14 +251,18 @@ class StreamingServerHelper(
      * recover a stuck server when you're not physically at the phone). Goes further than a plain
      * stop/start: also wipes per-IP failed-auth counters and blocks (see isRateLimited/
      * recordFailedAttempt above), which a plain socket restart wouldn't touch since that state
-     * lives in this same helper instance, not in the listening socket. This is deliberately the
-     * one button that resets everything at once, rather than separate "restart socket" /
-     * "clear IP blocks" controls - simpler to reason about from the UI, and there's no real
-     * downside to always clearing both together.
+     * lives in this same helper instance, not in the listening socket, AND asks the service to
+     * restart the camera/encoder pipeline itself (onFullRestart) - a dead listening socket is only
+     * one way this can fail silently; a wedged encoder leaves the socket and foreground service
+     * looking perfectly healthy while nothing actually streams. This is deliberately the one button
+     * that resets everything at once, rather than separate "restart socket" / "clear IP blocks" /
+     * "restart camera" controls - simpler to reason about from the UI, and there's no real downside
+     * to always clearing all of it together.
      */
     fun restartServerFull() {
         failedAttempts.clear()
         startStreamingServer()
+        try { onFullRestart() } catch (_: Exception) {}
     }
 
     /**
@@ -927,8 +952,9 @@ class StreamingServerHelper(
 
             // Remote "Restart server" - the only recovery option when you're not physically at the
             // phone. Respond and close this connection first, then tear down and recreate the
-            // listening socket: that only affects the *listening* socket, not this already-accepted
-            // client connection, so the response reaches the caller before the restart happens.
+            // listening socket (and the camera/encoder pipeline, see restartServerFull): neither
+            // affects this already-accepted client connection, so the response reaches the caller
+            // before the restart happens.
             if (path == "/control/restart-server") {
                 writer.print("HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nConnection: close\r\n\r\n")
                 writer.print("{\"restarting\":true}")
@@ -1791,29 +1817,17 @@ class StreamingServerHelper(
         h264Clients.clear()
         audioClients.clear()
         (clientsToClose + h264ClientsToClose).forEach { client ->
-            try {
-                client.socket.close()
-            } catch (e: IOException) {
-                onLog("Error closing client connection: ${e.message}")
-            }
+            closeAbortively(client.socket)
         }
         audioClientsToClose.forEach { socket ->
-            try {
-                socket.close()
-            } catch (e: IOException) {
-                onLog("Error closing audio connection: ${e.message}")
-            }
+            closeAbortively(socket)
         }
         if (clientsToClose.isNotEmpty() || h264ClientsToClose.isNotEmpty()) onClientDisconnected()
     }
 
     fun removeClient(client: Client) {
         if (!clients.remove(client)) return
-        try {
-            client.socket.close()
-        } catch (e: IOException) {
-            onLog("Error closing client socket: ${e.message}")
-        }
+        closeAbortively(client.socket)
         onClientDisconnected()
     }
 
