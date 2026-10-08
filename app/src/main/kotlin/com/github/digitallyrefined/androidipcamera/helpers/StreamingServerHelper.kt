@@ -163,7 +163,7 @@ class StreamingServerHelper(
      * single-threaded caller such as the hardware encoder's drain thread, the whole pipeline wedges
      * forever. setSoLinger(true, 0) forces an immediate RST close instead, which never blocks.
      */
-    private fun closeAbortively(socket: Socket) {
+    fun closeAbortively(socket: Socket) {
         try { socket.setSoLinger(true, 0) } catch (_: Exception) {}
         try { socket.close() } catch (_: Exception) {}
     }
@@ -825,7 +825,7 @@ class StreamingServerHelper(
                     writer.print("SECURITY ERROR: Authentication credentials not properly configured.\r\n")
                     writer.print("Configure username and password in app settings.\r\n")
                     writer.flush()
-                    socket.close()
+                    closeAbortively(socket)
                     onLog("SECURITY: Connection rejected - authentication credentials not configured")
                     return
                 }
@@ -859,7 +859,7 @@ class StreamingServerHelper(
                         writer.print("Retry-After: 30\r\n") // Reduced to 30 seconds for unauthenticated
                         writer.print("Connection: close\r\n\r\n")
                         writer.flush()
-                        socket.close()
+                        closeAbortively(socket)
                         onLog("SECURITY: Rate limited unauthenticated request from $clientIp")
                         Thread.sleep(100)
                         return
@@ -879,7 +879,7 @@ class StreamingServerHelper(
                     writer.print("Connection: close\r\n\r\n")
                     writer.print("Unauthorized. Check username and password in the app settings.\r\n")
                     writer.flush()
-                    socket.close()
+                    closeAbortively(socket)
                     return
                 }
 
@@ -895,7 +895,7 @@ class StreamingServerHelper(
                         writer.print("Retry-After: 30\r\n")
                         writer.print("Connection: close\r\n\r\n")
                         writer.flush()
-                        socket.close()
+                        closeAbortively(socket)
                         onLog("SECURITY: Rate limited malformed auth attempt from $clientIp")
                         Thread.sleep(100)
                         return
@@ -905,7 +905,7 @@ class StreamingServerHelper(
                     writer.print("Connection: close\r\n\r\n")
                     writer.print("Unauthorized. Check username and password in the app settings.\r\n")
                     writer.flush()
-                    socket.close()
+                    closeAbortively(socket)
                     onLog("SECURITY: Failed authentication attempt from $clientIp (malformed base64)")
                     return
                 }
@@ -917,7 +917,7 @@ class StreamingServerHelper(
                         writer.print("Retry-After: 30\r\n") // Reduced to 30 seconds for failed auth
                         writer.print("Connection: close\r\n\r\n")
                         writer.flush()
-                        socket.close()
+                        closeAbortively(socket)
                         onLog("SECURITY: Rate limited failed auth attempt from $clientIp")
                         Thread.sleep(100)
                         return
@@ -927,7 +927,7 @@ class StreamingServerHelper(
                     writer.print("Connection: close\r\n\r\n")
                     writer.print("Unauthorized. Check username and password in the app settings.\r\n")
                     writer.flush()
-                    socket.close()
+                    closeAbortively(socket)
                     onLog("SECURITY: Failed authentication attempt from $clientIp")
                     return
                 }
@@ -946,7 +946,7 @@ class StreamingServerHelper(
                 writer.print("Connection: close\r\n\r\n")
                 writer.print(htmlResponse)
                 writer.flush()
-                socket.close()
+                closeAbortively(socket)
                 return
             }
 
@@ -959,7 +959,7 @@ class StreamingServerHelper(
                 writer.print("HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nConnection: close\r\n\r\n")
                 writer.print("{\"restarting\":true}")
                 writer.flush()
-                try { socket.close() } catch (_: Exception) {}
+                closeAbortively(socket)
                 onLog("Remote restart requested from $clientIp")
                 restartServerFull()
                 return
@@ -977,14 +977,14 @@ class StreamingServerHelper(
                     else -> {
                         writer.print("HTTP/1.1 404 Not Found\r\nConnection: close\r\n\r\n")
                         writer.flush()
-                        try { socket.close() } catch (_: Exception) {}
+                        closeAbortively(socket)
                         return
                     }
                 }
                 writer.print("HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nConnection: close\r\n\r\n")
                 writer.print("{\"streaming\":${isStreamingEnabled()}}")
                 writer.flush()
-                try { socket.close() } catch (_: Exception) {}
+                closeAbortively(socket)
                 return
             }
 
@@ -994,7 +994,7 @@ class StreamingServerHelper(
                 writer.print("HTTP/1.1 503 Service Unavailable\r\nConnection: close\r\n\r\n")
                 writer.print("Streaming is disabled. POST /control/start to re-enable.\r\n")
                 writer.flush()
-                try { socket.close() } catch (_: Exception) {}
+                closeAbortively(socket)
                 return
             }
 
@@ -1032,7 +1032,7 @@ class StreamingServerHelper(
                     writer.print("Content-Type: text/plain\r\n")
                     writer.print("Cache-Control: no-store\r\nConnection: close\r\n\r\nno frame"); writer.flush()
                 }
-                try { socket.close() } catch (_: Exception) {}
+                closeAbortively(socket)
                 return
             }
 
@@ -1050,7 +1050,7 @@ class StreamingServerHelper(
                     writer.print("Connection: close\r\n\r\n")
                     writer.print("""{"error":"recording_disabled"}""")
                     writer.flush()
-                    try { socket.close() } catch (_: Exception) {}
+                    closeAbortively(socket)
                     return
                 }
                 val (_, status, json) = onRecordStart()
@@ -1059,7 +1059,7 @@ class StreamingServerHelper(
                 writer.print("Connection: close\r\n\r\n")
                 writer.print(json)
                 writer.flush()
-                try { socket.close() } catch (_: Exception) {}
+                closeAbortively(socket)
                 return
             }
 
@@ -1070,7 +1070,7 @@ class StreamingServerHelper(
                     writer.print("Connection: close\r\n\r\n")
                     writer.print("""{"error":"recording_disabled"}""")
                     writer.flush()
-                    try { socket.close() } catch (_: Exception) {}
+                    closeAbortively(socket)
                     return
                 }
                 val (_, status, json) = onRecordStop()
@@ -1079,7 +1079,7 @@ class StreamingServerHelper(
                 writer.print("Connection: close\r\n\r\n")
                 writer.print(json)
                 writer.flush()
-                try { socket.close() } catch (_: Exception) {}
+                closeAbortively(socket)
                 return
             }
 
@@ -1094,7 +1094,7 @@ class StreamingServerHelper(
                 writer.print("Connection: close\r\n\r\n")
                 writer.print(json)
                 writer.flush()
-                try { socket.close() } catch (_: Exception) {}
+                closeAbortively(socket)
                 return
             }
 
@@ -1109,13 +1109,13 @@ class StreamingServerHelper(
                 writer.print("Connection: close\r\n\r\n")
                 writer.print(json)
                 writer.flush()
-                try { socket.close() } catch (_: Exception) {}
+                closeAbortively(socket)
                 return
             }
 
             // ---- Recorded files endpoints (Movies/AndroidIPCamera or the custom folder) ----
             if (fileManager.handleRequest(httpMethod, path, writer, outputStream)) {
-                try { socket.close() } catch (_: Exception) {}
+                closeAbortively(socket)
                 return
             }
 
@@ -1133,7 +1133,7 @@ class StreamingServerHelper(
                     }
                     writer.print("HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nConnection: close\r\n\r\nOK")
                     writer.flush()
-                    socket.close()
+                    closeAbortively(socket)
                     return
                 }
 
@@ -1143,7 +1143,7 @@ class StreamingServerHelper(
                 }
                 writer.print("HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nConnection: close\r\n\r\nOK")
                 writer.flush()
-                socket.close()
+                closeAbortively(socket)
                 return
             }
 
@@ -1154,7 +1154,7 @@ class StreamingServerHelper(
                     writer.print("Connection: close\r\n\r\n")
                     writer.print("Microphone permission not granted.\r\n")
                     writer.flush()
-                    try { socket.close() } catch (_: Exception) {}
+                    closeAbortively(socket)
                     return
                 }
                 val accepted = synchronized(this) {
@@ -1162,7 +1162,7 @@ class StreamingServerHelper(
                     else { audioClients.add(socket); true }
                 }
                 if (!accepted) {
-                    try { socket.close() } catch (_: Exception) {}
+                    closeAbortively(socket)
                     return
                 }
                 try {
@@ -1265,7 +1265,7 @@ class StreamingServerHelper(
                         } catch (_: Exception) {
                         }
                         try {
-                            socket.close()
+                            closeAbortively(socket)
                         } catch (_: Exception) {
                         }
                     }
@@ -1275,7 +1275,7 @@ class StreamingServerHelper(
                     writer.print("Connection: close\r\n\r\n")
                     writer.print("Microphone permission not granted.\r\n")
                     writer.flush()
-                    try { socket.close() } catch (_: Exception) {}
+                    closeAbortively(socket)
                 } catch (e: Exception) {
                     onLog("Audio stream error: ${e.message}")
                     try {
@@ -1286,11 +1286,11 @@ class StreamingServerHelper(
                         writer.flush()
                     } catch (_: Exception) {
                     } finally {
-                        try { socket.close() } catch (_: Exception) {}
+                        closeAbortively(socket)
                     }
                 } finally {
                     audioClients.remove(socket)
-                    try { socket.close() } catch (_: Exception) {}
+                    closeAbortively(socket)
                 }
                 return
             }
@@ -1316,7 +1316,7 @@ class StreamingServerHelper(
                 val info = buildDeviceInfo()
                 writer.print("HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nConnection: close\r\n\r\n")
                 writer.print(info.toJsonString()); writer.flush()
-                try { socket.close() } catch (_: Exception) {}
+                closeAbortively(socket)
                 return
             }
 
@@ -1334,7 +1334,7 @@ class StreamingServerHelper(
                     else { h264Clients.add(client); true }
                 }
                 if (!accepted) {
-                    try { socket.close() } catch (_: Exception) {}
+                    closeAbortively(socket)
                     return
                 }
                 onClientConnected()  // starts camera + encoder
@@ -1371,7 +1371,7 @@ class StreamingServerHelper(
                     else { clients.add(client); true }
                 }
                 if (!accepted) {
-                    try { socket.close() } catch (_: Exception) {}
+                    closeAbortively(socket)
                     return
                 }
                 onClientConnected()
@@ -1400,14 +1400,14 @@ class StreamingServerHelper(
                 writer.print("Not Found\r\n")
                 writer.flush()
                 try {
-                    socket.close()
+                    closeAbortively(socket)
                 } catch (_: Exception) {
                 }
             }
         } catch (e: Exception) {
             onLog("Error handling client connection from $clientIp: ${e.message}")
             try {
-                socket.close()
+                closeAbortively(socket)
             } catch (closeException: Exception) {
                 // Ignore
             }
@@ -1523,7 +1523,7 @@ class StreamingServerHelper(
             }
         } finally {
             try {
-                socket.close()
+                closeAbortively(socket)
             } catch (_: Exception) {
             }
         }
@@ -1671,7 +1671,7 @@ class StreamingServerHelper(
                 writer.write("Connection: close\r\n\r\n")
                 writer.flush()
             }
-            socket.close()
+            closeAbortively(socket)
             // Add small delay to prevent rapid reconnection loops
             Thread.sleep(100)
             return true
@@ -1688,7 +1688,7 @@ class StreamingServerHelper(
                 writer.write("Connection: close\r\n\r\n")
                 writer.flush()
             }
-            socket.close()
+            closeAbortively(socket)
             // Add small delay to prevent rapid reconnection loops
             Thread.sleep(100)
             return true

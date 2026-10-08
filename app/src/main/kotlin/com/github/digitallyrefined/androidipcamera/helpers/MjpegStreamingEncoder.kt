@@ -201,14 +201,19 @@ class MjpegStreamingEncoder(
                         client.outputStream.flush()
                         client.markWriteSuccess()
                     } catch (e: IOException) {
-                        try { client.socket.close() } catch (_: Exception) {}
+                        // A plain socket.close() here performs a graceful TLS close_notify
+                        // handshake with the peer, which can block indefinitely on a stalled/
+                        // half-dead connection (see StreamingServerHelper.closeAbortively) - on
+                        // this single-threaded MjpegNetworkWriter, that would wedge the whole
+                        // MJPEG pipeline exactly like the H.264 encoder's drain thread used to.
+                        helper.closeAbortively(client.socket)
                         toRemove.add(client)
                     } catch (e: java.net.SocketTimeoutException) {
                         // Handle slow network - client is not reading fast enough
-                        try { client.socket.close() } catch (_: Exception) {}
+                        helper.closeAbortively(client.socket)
                         toRemove.add(client)
                     } catch (e: Exception) {
-                        try { client.socket.close() } catch (_: Exception) {}
+                        helper.closeAbortively(client.socket)
                         toRemove.add(client)
                     }
                 }
