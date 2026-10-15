@@ -23,6 +23,7 @@
     <uses-feature android:name="android.hardware.camera.any" />
 
     <application
+        android:name=".AndroidIpCameraApp"
         android:label="Android IP Camera"
         android:icon="@mipmap/ic_launcher"
         android:roundIcon="@mipmap/ic_launcher_round"

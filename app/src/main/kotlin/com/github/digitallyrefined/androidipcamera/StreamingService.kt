@@ -190,6 +190,11 @@ class StreamingService : LifecycleService() {
 
     override fun onCreate() {
         super.onCreate()
+        // If the service process was alive a moment ago and this fires again without a matching
+        // "onDestroy" line between them in crash_log.txt, the process was killed from underneath
+        // the service (OOM-kill, or something else outside this app's own control) rather than
+        // stopped cleanly - onDestroy below always runs for a normal stop/restart.
+        CrashLogger.line("StreamingService", "onCreate (pid=${android.os.Process.myPid()})")
         startForegroundService()
         val prefs = PreferenceManager.getDefaultSharedPreferences(this)
         val savedCameraId = prefs.getString(PREF_CAMERA_ID, null)
@@ -225,8 +230,23 @@ class StreamingService : LifecycleService() {
         }
     }
 
+    /**
+     * The OS's own early warning before it starts killing processes to free memory - this ran
+     * un-wired before (DeviceMemoryHelper.updateMemoryPressure was only ever called reactively,
+     * after some OutOfMemoryError had already been caught in Java code, which native/camera/
+     * MediaCodec memory pressure wouldn't necessarily trigger at all). Logged unconditionally
+     * since a rising sequence of these right before a death is exactly the "why" an OOM-kill
+     * doesn't otherwise leave behind.
+     */
+    override fun onTrimMemory(level: Int) {
+        super.onTrimMemory(level)
+        CrashLogger.line("StreamingService", "onTrimMemory(level=$level)")
+        DeviceMemoryHelper.updateMemoryPressure(level)
+    }
+
     override fun onDestroy() {
         super.onDestroy()
+        CrashLogger.line("StreamingService", "onDestroy")
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P)
             try { unregisterReceiver(notificationChannelReceiver) } catch (_: Exception) {}
         safeStopRecording()
@@ -352,7 +372,7 @@ class StreamingService : LifecycleService() {
         if (streamingServerHelper == null) {
             streamingServerHelper = StreamingServerHelper(
                 this,
-                onLog = { Log.i(TAG, "Server: $it"); onLog?.invoke(it) },
+                onLog = { Log.i(TAG, "Server: $it"); onLog?.invoke(it); CrashLogger.line("Server", it) },
                 onClientConnected = {
                     launchMain {
                         onClientConnected?.invoke()
@@ -416,8 +436,8 @@ class StreamingService : LifecycleService() {
                 }
             )
             // Initialize encoders with the streaming server helper
-            h264StreamingEncoder = H264StreamingEncoder(this, streamingServerHelper!!) { Log.i(TAG, "H264: $it"); onLog?.invoke(it) }
-            mjpegStreamingEncoder = MjpegStreamingEncoder(this, streamingServerHelper!!) { Log.i(TAG, "MJPEG: $it"); onLog?.invoke(it) }
+            h264StreamingEncoder = H264StreamingEncoder(this, streamingServerHelper!!) { Log.i(TAG, "H264: $it"); onLog?.invoke(it); CrashLogger.line("H264", it) }
+            mjpegStreamingEncoder = MjpegStreamingEncoder(this, streamingServerHelper!!) { Log.i(TAG, "MJPEG: $it"); onLog?.invoke(it); CrashLogger.line("MJPEG", it) }
         }
         streamingServerHelper?.startStreamingServer()
     }

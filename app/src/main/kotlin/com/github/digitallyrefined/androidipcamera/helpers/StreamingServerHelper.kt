@@ -965,6 +965,25 @@ class StreamingServerHelper(
                 return
             }
 
+            // The crash-safe log (see CrashLogger) - the only way to see what led up to a death
+            // that happened with nobody watching the phone, since logcat's buffer is lost the
+            // moment the process dies. Plain text, so it's easy to open directly in a browser or
+            // pipe straight into a bug report.
+            if (path == "/control/logs") {
+                val log = CrashLogger.read() ?: "(no log yet)"
+                val body = log.toByteArray(Charsets.UTF_8)
+                writer.print("HTTP/1.1 200 OK\r\n")
+                writer.print("Content-Type: text/plain; charset=utf-8\r\n")
+                writer.print("Content-Length: ${body.size}\r\n")
+                writer.print("Cache-Control: no-store\r\n")
+                writer.print("Connection: close\r\n\r\n")
+                writer.flush()
+                outputStream.write(body)
+                outputStream.flush()
+                closeAbortively(socket)
+                return
+            }
+
             // Streaming on/off, so a home-automation system can stop the camera serving without
             // needing access to the device. Deliberately does NOT close the listening socket:
             // shutting the port would make /control/start unreachable and turning the camera back
